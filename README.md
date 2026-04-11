@@ -51,33 +51,23 @@
 
 ### 🚀 Quick Start
 
-**Requirements:** Python **3.10+**, a local [**Fiji**](https://fiji.sc/) install (folder with `jars/` and `plugins/`), and a **Java** runtime compatible with that Fiji build.
+**Full walkthrough (install → configure → verify):** [**docs/quickstart.md**](docs/quickstart.md)
 
-**Install from source (recommended for development):**
+**Minimal path:**
 
-```bash
-git clone https://github.com/surajinacademia/Fiji_imageJ_mcp.git
-cd Fiji_imageJ_mcp
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[test]"
-```
+1. **Install** — Python **3.10+**, [**Fiji**](https://fiji.sc/) (install root with `jars/` + `plugins/`), matching **Java**. Then:
+   ```bash
+   git clone https://github.com/surajinacademia/Fiji_imageJ_mcp.git && cd Fiji_imageJ_mcp
+   python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   pip install -e ".[test]"
+   ```
+2. **Configure** — same venv, absolute Fiji path, restart the client:
+   ```bash
+   fiji-mcp-install install cursor --fiji-path /Applications/Fiji
+   ```
+3. **Try** — in chat: *“Run the Fiji MCP `health_check` tool.”* Optional terminal smoke: `FIJI_PATH=… FIJI_MODE=headless python scripts/demo_fiji_mcp_session.py`
 
-**Configure Cursor in one go** (uses the same Python you just installed; set your real Fiji root):
-
-```bash
-fiji-mcp-install install cursor --fiji-path /Applications/Fiji
-```
-
-Restart **Cursor** (or whichever client you configured) after the installer runs.
-
-**Regenerate README hero images** (optional; requires `FIJI_PATH` and a Python env with PyImageJ):
-
-```bash
-export FIJI_PATH=/Applications/Fiji
-export FIJI_MODE=headless
-python scripts/generate_readme_demo_assets.py
-```
+**Regenerate README demo JPEGs** (optional): `FIJI_PATH=… FIJI_MODE=headless python scripts/generate_readme_demo_assets.py`
 
 ### Auto-Configure Your AI Application
 

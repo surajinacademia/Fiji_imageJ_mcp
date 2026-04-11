@@ -1,47 +1,83 @@
-# Quick start
+# Install and quick start
 
-## Requirements
+Three steps: **install the Python package** → **tell the MCP client where Fiji lives** → **confirm it works**.
 
-- **Python** 3.10+ (venv or conda)
-- [**Fiji**](https://fiji.sc/) installed locally — directory that contains `jars/` and `plugins/`
-- **Java** compatible with your Fiji build
-- **Display** only for `FIJI_MODE=gui` and full-screen Robot capture. **Headless** MCP still supports `active_image` and `results_table` screenshots.
+---
 
-## Install from source
+## 1. Prerequisites
+
+| You need | Notes |
+| -------- | ----- |
+| **Python 3.10+** | Use a venv or conda env dedicated to this project. |
+| **Fiji** | [fiji.sc](https://fiji.sc/) — the folder you pass later must contain **`jars/`** and **`plugins/`** (installation root, not only a nested `.app` bundle path on macOS). |
+| **Java** | Same major line your Fiji build expects. |
+
+For normal IDE / CLI use, **`FIJI_MODE=headless`** is enough (no desktop required for `active_image` / `results_table` screenshots). Use **`gui`** only if you need full-screen Robot capture.
+
+---
+
+## 2. Install (from source)
+
+**Method:** clone the repo, create a venv, install in editable mode.
 
 ```bash
 git clone https://github.com/surajinacademia/Fiji_imageJ_mcp.git
 cd Fiji_imageJ_mcp
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -U pip setuptools wheel
 pip install -e ".[test]"
 ```
 
-For the same **dev tooling** as [cellpose_mcp](https://github.com/surajinacademia/cellpose_mcp) (Ruff, Black, Mypy, pre-commit hooks): `pip install -e ".[dev]"` then `pre-commit install`.
-
-## Point the server at Fiji
-
-Set **`FIJI_PATH`** to the **installation root** (not only the nested `.app` path on macOS), for example `/Applications/Fiji` when that folder contains `jars/` and `plugins/`.
-
-## Configure your editor or CLI
-
-Use the **same** Python where you installed the package:
+Check that the CLI is on your PATH (same shell as above):
 
 ```bash
+fiji-mcp-install --help
+python -m fiji_mcp --help
+```
+
+*(There is no PyPI one-liner yet; installs are from this repository.)*
+
+---
+
+## 3. Configure your MCP client
+
+**Method A — auto-install (recommended)**  
+Run **`fiji-mcp-install`** with the **absolute** Fiji root and your **target** app. Use the **same** venv you used for `pip install` (so `python` there has `pyimagej` / `fiji_mcp`).
+
+Replace `/Applications/Fiji` with your real path.
+
+```bash
+# Pick one:
 fiji-mcp-install install cursor --fiji-path /Applications/Fiji
 fiji-mcp-install install claude-desktop --fiji-path /Applications/Fiji
 fiji-mcp-install install claude-code --fiji-path /Applications/Fiji
 fiji-mcp-install install gemini --fiji-path /Applications/Fiji
 fiji-mcp-install install windsurf --fiji-path /Applications/Fiji
-# Claude Code project-scoped (creates <DIR>/.mcp.json):
-fiji-mcp-install install claude-code --fiji-path /Applications/Fiji --project .
+
+# Optional: Claude Code project file instead of ~/.claude.json
+fiji-mcp-install install claude-code --fiji-path /Applications/Fiji --project /path/to/your/repo
 ```
 
-Defaults use **`FIJI_MODE=headless`** (recommended inside IDE / CLI MCP). Restart the app or CLI after writing config.
+Defaults: **`FIJI_MODE=headless`**, **`PYTHONUNBUFFERED=1`**.  
+Optional: `--mode gui`, or `--command /full/path/to/venv/bin/fiji-mcp-server` if the GUI app cannot see your venv.
 
-Details: [Configuration](configuration.md).
+**Then restart** Cursor, Claude, Windsurf, or the Gemini CLI so it reloads MCP config.
 
-## Try a demo session
+**Method B — paste JSON yourself**  
+Same shape everywhere: `mcpServers.fiji` with `command` + `args: ["-m", "fiji_mcp"]` + `env` (`FIJI_PATH`, `FIJI_MODE`, `PYTHONUNBUFFERED`). See [Configuration](configuration.md) for paths per app and a full example.
+
+---
+
+## 4. Quick verification
+
+**In the AI chat** (after restart), try:
+
+```text
+Call the Fiji MCP health_check tool
+```
+
+**From the terminal** (optional smoke script; needs `FIJI_PATH`):
 
 ```bash
 export FIJI_PATH=/Applications/Fiji
@@ -49,31 +85,28 @@ export FIJI_MODE=headless
 python scripts/demo_fiji_mcp_session.py
 ```
 
-This runs `health_check`, opens `demo_images/sample_gradient.pgm`, applies blur/stats macros, captures `active_image` / `results_table`, and optionally `full_screen` if a display exists.
+First JVM start can take **30–90 seconds**; later calls are usually fast.
 
-## Batch analysis report (stdio MCP)
+---
 
-`scripts/generate_image_analysis_report.py` spawns the **same** stdio MCP server your IDE uses and writes:
+## 5. What to read next
 
-- `research_output/analysis_raw.json`
-- `docs/fiji_mcp_comprehensive_image_analysis_report.md`
+| Topic | Doc |
+| ----- | --- |
+| All env vars, troubleshooting, Cursor plugin | [Configuration](configuration.md) |
+| Every MCP tool | [MCP Tools](tools.md) |
+| Package layout | [Architecture](architecture.md) |
+| Batch report over stdio MCP | [Batch report workflow](batch_report_workflow.md) |
+| Roadmap / internals | [plan.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md) |
+
+**Developers:** `pip install -e ".[dev]"` and `pre-commit install` for Ruff / format hooks (see repo `README.md`).
+
+---
+
+## Tests (optional)
 
 ```bash
-export FIJI_PATH=/Applications/Fiji
-export FIJI_MODE=headless
-export FIJI_MCP_PYTHON=/path/to/conda-or-venv/bin/python   # if the driver lacks pyimagej
-python scripts/generate_image_analysis_report.py
+pytest -m "not integration"
 ```
 
-**Stdio safety:** do not use ImageJ `print()` in macros under stdio transport (stdout must stay JSON-clean). Prefer returning strings from macros or tool-level handling.
-
-## Development and tests
-
-```bash
-pip install -e ".[test]"
-pytest
-```
-
-CI runs `pytest -m "not integration"`. For integration tests, set **`FIJI_PATH`** and **`FIJI_TEST_IMAGE`**, then run pytest without that marker.
-
-Roadmap: [`plan.md`](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md).
+Integration tests need **`FIJI_PATH`** and **`FIJI_TEST_IMAGE`** set; see [Configuration](configuration.md).

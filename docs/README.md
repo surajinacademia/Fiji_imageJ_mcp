@@ -47,7 +47,7 @@
 
 ## Browse the docs
 
-- **[Quick Start](quickstart.md)** — install, `FIJI_PATH`, `fiji-mcp-install` targets, demos, tests  
+- **[Install & quick start](quickstart.md)** — clone, venv, `pip install`, auto vs manual MCP config, verify  
 - **[MCP Tools](tools.md)** — all **19** tools  
 - **[Configuration](configuration.md)** — env vars, manual JSON, troubleshooting  
 - **[Architecture](architecture.md)** — layout and data flow  
