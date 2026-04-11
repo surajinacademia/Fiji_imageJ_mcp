@@ -8,19 +8,19 @@ if ((${#tars[@]} == 0)); then
   echo "::error::No dist/*.tar.gz found; run python -m build first."
   exit 1
 fi
-required=(
-  "extras/cursor-fiji-mcp-plugin/.cursor-plugin/plugin.json"
-  "docs/releases/RELEASE_NOTES_v0.1.3.md"
-)
+required_subpath="extras/cursor-fiji-mcp-plugin/.cursor-plugin/plugin.json"
 for archive in "${tars[@]}"; do
   echo "Verifying sdist: ${archive}"
   listing=$(tar -tzf "${archive}")
-  for path in "${required[@]}"; do
-    if ! grep -qF -- "${path}" <<<"${listing}"; then
-      echo "::error::sdist missing required path '${path}' in '${archive}'"
-      grep -E 'extras/|docs/releases/RELEASE_NOTES' <<<"${listing}" || true
-      exit 1
-    fi
-  done
+  if ! grep -qF -- "${required_subpath}" <<<"${listing}"; then
+    echo "::error::sdist missing Cursor plugin bundle path '${required_subpath}' in '${archive}'"
+    grep -E 'extras/' <<<"${listing}" || true
+    exit 1
+  fi
+  if ! grep -qE 'docs/releases/RELEASE_NOTES_v[0-9]+\.[0-9]+\.[0-9]+\.md$' <<<"${listing}"; then
+    echo "::error::sdist missing any docs/releases/RELEASE_NOTES_vX.Y.Z.md in '${archive}'"
+    grep 'docs/releases/' <<<"${listing}" || true
+    exit 1
+  fi
 done
 echo "sdist layout OK (${#tars[@]} archive(s))"
