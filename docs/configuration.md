@@ -1,33 +1,51 @@
 # Configuration
 
-## Auto-install (`fiji-mcp-install`)
+---
 
-| Application | Command | Config file |
-|-------------|---------|-------------|
-| **Cursor** | `fiji-mcp-install install cursor --fiji-path <ABS>` | `~/.cursor/mcp.json` |
-| **Claude Desktop** | `fiji-mcp-install install claude-desktop --fiji-path <ABS>` | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Linux/Windows: see [Anthropic docs](https://support.anthropic.com/) |
-| **Claude Code** (user) | `fiji-mcp-install install claude-code --fiji-path <ABS>` | `~/.claude.json` → top-level `mcpServers` ([Claude Code MCP](https://code.claude.com/docs/en/mcp)) |
-| **Claude Code** (project) | `fiji-mcp-install install claude-code --fiji-path <ABS> --project <DIR>` | `<DIR>/.mcp.json` (commit-friendly team scope) |
-| **Gemini CLI** | `fiji-mcp-install install gemini --fiji-path <ABS>` | `~/.gemini/settings.json` → `mcpServers` ([Gemini CLI MCP](https://geminicli.com/docs/tools/mcp-server/)) |
-| **Windsurf** | `fiji-mcp-install install windsurf --fiji-path <ABS>` | `~/.codeium/windsurf/mcp_config.json` ([Windsurf MCP](https://docs.windsurf.com/windsurf/cascade/mcp)) |
+## Fiji path
 
-Options:
+The most important setting. Point it at the **folder** containing Fiji's `jars/` and `plugins/` directories.
 
-- `--mode` — `gui`, `headless`, `auto`, or `smart` (default `headless`).
-- `--command` — absolute path to `fiji-mcp-server` if the host app’s PATH does not see your venv.
-- `--project DIR` — **only with `claude-code`:** write project-scoped `.mcp.json` under `DIR` instead of user `~/.claude.json`.
+```bash
+# Set it when running fiji-mcp-install:
+fiji-mcp-install install cursor --fiji-path /Applications/Fiji
 
-Restart the IDE or CLI after changing MCP config.
+# Or set it as an environment variable:
+export FIJI_PATH=/Applications/Fiji
+```
 
-## Manual MCP JSON
+Common locations:
+- **macOS:** `/Applications/Fiji` or `/Applications/Fiji.app`
+- **Windows:** `C:\Fiji.app`
+- **Linux:** `/opt/Fiji.app` or `~/Fiji.app`
 
-Use the Python executable from the environment where `fiji-mcp-server` / `fiji_mcp` is installed:
+---
+
+## Mode: headless vs GUI
+
+| Mode | Use when | Screenshot modes available |
+|------|----------|---------------------------|
+| `headless` (default) | IDE / CLI MCP — most stable | `active_image`, `results_table` |
+| `gui` | Local desktop, need full-screen capture | all three, including `full_screen` |
+
+To change mode:
+```bash
+fiji-mcp-install install cursor --fiji-path /Applications/Fiji --mode gui
+```
+
+> On macOS with Cursor or Claude Desktop, stick with `headless` — GUI mode can hang.
+
+---
+
+## Manual JSON config
+
+If you prefer to edit the config file directly, use this shape (works for all apps):
 
 ```json
 {
   "mcpServers": {
     "fiji": {
-      "command": "/path/to/venv-or-conda/bin/python",
+      "command": "/path/to/your/python",
       "args": ["-m", "fiji_mcp"],
       "env": {
         "FIJI_PATH": "/Applications/Fiji",
@@ -39,65 +57,48 @@ Use the Python executable from the environment where `fiji-mcp-server` / `fiji_m
 }
 ```
 
-- **Cursor:** `~/.cursor/mcp.json` or project `.cursor/mcp.json`.
-- **Claude Code:** user merge goes to `~/.claude.json`; project merge to `.mcp.json` (see table above).
-- **Gemini CLI:** `~/.gemini/settings.json` may already contain other keys; the installer only merges `mcpServers.fiji`.
-- **Windsurf:** same JSON shape as Cursor (`mcpServers` with `command` / `args` / `env`).
-- **`PYTHONUNBUFFERED=1`:** keeps stdio JSON-RPC lines flushing promptly.
+Replace `/path/to/your/python` with the Python that has `fiji-mcp-server` installed — usually `.venv/bin/python` or your conda environment's Python.
 
-An example file lives at [`.mcp.json`](../.mcp.json) in the repository (edit `FIJI_PATH` and `command` for your machine).
+Config file locations:
+
+| App | Config file |
+|-----|-------------|
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Code (user) | `~/.claude.json` |
+| Claude Code (project) | `<project>/.mcp.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+
+---
 
 ## Environment variables
 
-| Variable | Role | Typical |
-|----------|------|---------|
-| `FIJI_PATH` | Fiji root (`jars/`, `plugins/`) | `/Applications/Fiji` |
-| `FIJI_MODE` | `gui`, `headless`, `auto`, `smart` | `headless` for IDE MCP |
-| `FIJI_JAVA_HOME` | Force JPype Java home | Optional |
-| `FIJI_OPERATION_TIMEOUT_SECONDS` | Tool timeout hint | `60` (range 1–86400) |
-| `FIJI_DATA_ROOTS` | Allowlist for `open_image` / `save_image` | Empty = unrestricted |
-| `FIJI_MCP_PYTHON` | Python to spawn MCP in batch scripts | Defaults to driver `sys.executable` |
-| `FIJI_LOG_LEVEL` | Python log level (stderr only) | `WARNING` |
-| `FIJI_PATH_CANDIDATES` | Extra Fiji roots to scan when `FIJI_PATH` is unset (`os.pathsep`-separated paths) | Optional; see `fiji_mcp.fiji_bridge._candidate_fiji_paths` |
+| Variable | What it does | Default |
+|----------|-------------|---------|
+| `FIJI_PATH` | Path to Fiji installation | Auto-detected |
+| `FIJI_MODE` | `headless`, `gui`, `smart`, or `auto` | `headless` |
+| `FIJI_JAVA_HOME` | Override Java home for JPype | Auto-detected |
+| `FIJI_OPERATION_TIMEOUT_SECONDS` | How long each tool can run before timing out | `60` |
+| `FIJI_DATA_ROOTS` | Restrict file access to specific folders (security) | Unrestricted |
+| `FIJI_SCREENSHOT_MAX_DIM` | Max screenshot width/height in pixels | `1920` |
+| `FIJI_SCREENSHOT_QUALITY` | JPEG quality (1–100) | `85` |
+| `FIJI_MAX_MACRO_CHARS` | Max macro length in characters | `500000` |
 
-Invalid numeric env values → **exit code 2** at startup (`python -m fiji_mcp` / `fiji-mcp-server`).
-
-### Additional tuning
-
-- `FIJI_SCREENSHOT_MAX_DIM` — default `1920`
-- `FIJI_SCREENSHOT_QUALITY` — JPEG quality, default `85`
-- `FIJI_SCREENSHOT_CACHE_SIZE` — LRU size, default `5`
-- `FIJI_GC_EVERY_N_OPERATIONS` — default `10`
-- `FIJI_MAX_MACRO_CHARS` — macro size cap, default `500000`
-- `FIJI_TEST_IMAGE` — integration test image path
-- `FIJI_INTERACTIVE_FORCE` — `1` on macOS + `gui` if PyImageJ needs `interactive:force`
-- `FIJI_MCP_CLIENT_TOOL_TIMEOUT` — seconds for each MCP `call_tool` in **client** scripts (`scripts/mcp_and_gui_fiji.py`, `scripts/generate_image_analysis_report.py`); default `300` / `900` respectively if unset
-
-## Terminal plug-and-play (`mcp_and_gui_fiji.py`)
-
-The MCP host (Cursor, etc.) still needs **`FIJI_PATH`** in merged JSON unless you rely on auto-detect inside the server process. For **local terminal** runs, `scripts/mcp_and_gui_fiji.py` can start **without** `FIJI_PATH` when `fiji_mcp` is importable (`pip install -e .` from the repo): it calls the same **`detect_fiji_path(load_settings())`** logic as the server (see `fiji_mcp/fiji_bridge.py` — standard OS install locations plus **`FIJI_PATH_CANDIDATES`**). If nothing matches, set **`FIJI_PATH`** to your Fiji **root** (folder containing `jars/`; on macOS often `/Applications/Fiji` with `Fiji.app` inside).
-
-The script’s spawned child server gets `PYTHONPATH=<repo>/src`, **`PYTHONUNBUFFERED=1`**, and **`FIJI_MODE=headless`** by default unless the parent environment already sets `FIJI_MODE`.
-
-See [Quick start — Plug-and-play](quickstart.md) for usage (`python scripts/mcp_and_gui_fiji.py`, flags, legacy subcommands).
-
-## Production notes
-
-- Prefer **`headless`** for remote or IDE-hosted MCP unless you need full-screen Robot capture.
-- Set **`FIJI_DATA_ROOTS`** on shared or untrusted-prompt hosts.
-- First Fiji cold start can take **30–90s** before `health_check` succeeds.
+---
 
 ## Troubleshooting
 
-- **Cursor + `gui` on macOS** often hangs — use **`headless`**; `active_image` and `results_table` still work.
-- **`ModuleNotFoundError: scyjava`** — wrong interpreter in MCP config; point `command` at the venv/conda Python with `pyimagej` installed, or re-run `fiji-mcp-install`.
+**`health_check` never responds / server won't start**
+- First JVM startup takes 30–90 seconds — wait before concluding it's broken
+- Verify your Fiji path: `ls /Applications/Fiji/jars` should list JAR files
 
-## Cursor plugin (optional)
+**`ModuleNotFoundError: scyjava` or `pyimagej`**
+- The app is using a different Python than where you installed the package
+- Re-run `fiji-mcp-install` from the same terminal, or pass `--command /full/path/to/fiji-mcp-server`
 
-Bundled under [`.cursor/plugins/fiji-mcp/`](../.cursor/plugins/fiji-mcp/) (rules, skill, slash command). Install locally:
+**Screenshot fails with "needs a display"**
+- You're in headless mode — use `capture_mode="active_image"` instead of `full_screen`
 
-```bash
-cp -R .cursor/plugins/fiji-mcp ~/.cursor/plugins/local/fiji-mcp
-```
-
-**Developer: Reload Window** in Cursor. See the plugin [README](../.cursor/plugins/fiji-mcp/README.md).
+**Cursor + GUI mode hangs on macOS**
+- Use `--mode headless` (the default) — `active_image` screenshots still work

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-11
+
+### Added
+
+- **Bundled agent skill** `fiji_mcp/data/FIJI_MCP_SKILL.md` (Cursor/Claude-style frontmatter): discovery-first workflow, stdio rules, plugin guidance, copy path via `importlib.resources`.
+- **Macro template library** expanded (channels, Z-project, colocal-style Image Calculator, MorphoLibJ / TrackMate / Coloc 2 / CLIJ2 / Cellpose entry points, extra filters).
+
+### Changed
+
+- **README / PyPI:** demo screenshots use absolute **`raw.githubusercontent.com`** URLs so images render on the PyPI project page (relative `./demo_output/` paths are not hosted by PyPI).
+
 ## [0.1.1] - 2026-04-11
 
 ### Added

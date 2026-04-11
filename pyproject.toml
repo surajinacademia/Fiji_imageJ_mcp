@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fiji-mcp-server"
-version = "0.1.1"
+version = "0.1.2"
 description = "Model Context Protocol (MCP) server for Fiji/ImageJ: macros, discovery, screenshots, and workflows via PyImageJ"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -69,7 +69,7 @@ fiji-mcp-install = "fiji_mcp.cli.install:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-fiji_mcp = ["data/macro_templates.json", "py.typed"]
+fiji_mcp = ["data/macro_templates.json", "data/FIJI_MCP_SKILL.md", "py.typed"]
 
 [tool.pytest.ini_options]
 addopts = [

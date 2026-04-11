@@ -4,6 +4,7 @@ include README.md
 include CHANGELOG.md
 include RELEASE_NOTES_v0.1.0.md
 include RELEASE_NOTES_v0.1.1.md
+include RELEASE_NOTES_v0.1.2.md
 include RELEASING.md
 include CLAUDE.md
 include pyproject.toml
@@ -13,6 +14,7 @@ recursive-include scripts *.py
 
 recursive-include src/fiji_mcp *.py
 recursive-include src/fiji_mcp *.json
+include src/fiji_mcp/data/FIJI_MCP_SKILL.md
 include src/fiji_mcp/py.typed
 
 recursive-exclude * __pycache__

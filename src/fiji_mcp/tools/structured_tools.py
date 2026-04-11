@@ -121,7 +121,10 @@ def list_macro_templates(
     category: Annotated[
         str | None,
         Field(
-            description="Optional filter: filters, process, segment, analyze, image, annotate."
+            description=(
+                "Optional filter: filters, process, segment, analyze, image, annotate, "
+                "channels, stack, plugins."
+            )
         ),
     ] = None,
 ) -> ListMacroTemplatesResult:
@@ -208,7 +211,11 @@ mcp.tool(
 
 mcp.tool(
     annotations=_ANN_READ,
-    description="List bundled macro snippets (threshold, blur, Analyze Particles, etc.) with stable ids.",
+    description=(
+        "List bundled macro snippets (filters, segmentation, Z-project, channels, optional Fiji plugins) "
+        "with stable ids. Filter by category: filters, process, segment, analyze, image, annotate, "
+        "channels, stack, plugins."
+    ),
 )(list_macro_templates)
 
 mcp.tool(

@@ -1,58 +1,125 @@
-# MCP tools
+# Available tools
 
-The server exposes **19** tools (FastMCP), grouped below. They run in the **Fiji / PyImageJ process started by the MCP server** (`python -m fiji_mcp` over stdio). That is **not** the same OS process as **Fiji.app** you may open from the desktop; headless MCP is the usual setup in IDEs.
+The server exposes **19 tools** you can ask your AI assistant to use. You never call them directly — just describe what you want and the assistant picks the right ones.
 
-## Calling tools without the IDE (stdio client)
+---
 
-To drive the **same JSON-RPC tool surface** from a terminal script (spawn server subprocess, `call_tool` only), use:
+## Running macros and images
 
-- **`scripts/mcp_and_gui_fiji.py`** — plug-and-play: optional `FIJI_PATH` auto-detect, optional demo image, MCP monitor ticks (`health_check`, `open_image`, `list_open_images`, `get_image_info`, `screenshot_fiji`), optional **Fiji.app** on macOS. See [Install and quick start](quickstart.md) (section *Plug-and-play: `scripts/mcp_and_gui_fiji.py`*).
-- **`scripts/generate_image_analysis_report.py`** — full corpus / report over stdio MCP (see [Batch report workflow](batch_report_workflow.md)).
+| Tool | What it does |
+|------|-------------|
+| `health_check` | Check that Fiji is running and get the version |
+| `run_macro` | Run any ImageJ macro — this is how plugins get called |
+| `run_batch_macros` | Run several macros in sequence |
+| `open_image` | Open an image file in Fiji |
+| `save_image` | Save the current image to disk |
 
-## Fiji lifecycle and macros
+**Example prompts:**
+```
+"Open ./cells.tif"
+"Apply a Gaussian blur with sigma 3"
+"Save the result as ./output/blurred.tif"
+```
 
-| Tool | Purpose |
-|------|---------|
-| `health_check` | Verify Fiji / PyImageJ readiness |
-| `run_macro` | Execute ImageJ macro code (with retries) |
-| `run_batch_macros` | Run multiple macros in sequence |
-| `open_image` | Open an image from a resolved path |
-| `save_image` | Save the active image with format hint |
+---
 
 ## Screenshots
 
-| Tool | Purpose |
-|------|---------|
-| `screenshot_fiji` | `full_screen` (Robot + display), `active_image`, or `results_table` |
+| Tool | What it does |
+|------|-------------|
+| `screenshot_fiji` | Capture a screenshot for visual verification |
 
-## Discovery and metadata
+**Three capture modes:**
+- `active_image` — rasterize the current image (works headless, best for verifying results)
+- `results_table` — render the ImageJ Results table as an image (works headless)
+- `full_screen` — capture the whole screen (requires GUI mode)
 
-| Tool | Purpose |
-|------|---------|
-| `list_all_commands` | Enumerate commands (CommandService + menus) |
-| `search_commands` | Search command names |
-| `describe_plugin` | Details for a specific command |
-| `list_extensions` | List extensions / plugins |
-| `list_open_images` | Titles of open image windows |
-| `get_image_info` | Dimensions, type, calibration |
-
-## Workflows and session helpers
-
-| Tool | Purpose |
-|------|---------|
-| `run_workflow` | Async multi-step workflow (MCP progress when the client supports it) |
-| `parse_macro_output` | Structured parsing helpers for macro text |
-| `compare_screenshots` | Compare two screenshot payloads |
-| `list_macro_templates` | List curated macro templates |
-| `get_macro_template` | Fetch one template by id |
-| `get_session_trace` | Session diagnostics |
-| `clear_session_trace` | Clear trace buffer |
-
-## Example prompts
-
-```text
-Run health_check, then open ./demo_images/sample_gradient.pgm
-Search ImageJ commands matching "Gaussian blur"
-Run a macro that blurs the image and reports mean gray value
-Take active_image and results_table screenshots after Measure
+**Example prompts:**
 ```
+"Show me a screenshot of the current image"
+"Capture the Results table after measuring"
+```
+
+---
+
+## Discovering plugins
+
+Don't know which ImageJ plugin to use? The assistant can search for you.
+
+| Tool | What it does |
+|------|-------------|
+| `search_commands` | Find commands by keyword |
+| `list_all_commands` | List all installed commands |
+| `describe_plugin` | Get details about a specific command |
+| `list_extensions` | Show installed update sites and extensions |
+
+**Example prompts:**
+```
+"Search for ImageJ commands related to 'segment'"
+"What plugins are available for colocalization?"
+"What parameters does the Analyze Particles command accept?"
+```
+
+---
+
+## Image information
+
+| Tool | What it does |
+|------|-------------|
+| `list_open_images` | Show all currently open image windows |
+| `get_image_info` | Get dimensions, channels, bit depth, and pixel statistics |
+
+**Example prompts:**
+```
+"What images are currently open in Fiji?"
+"What are the dimensions and bit depth of the current image?"
+```
+
+---
+
+## Multi-step workflows
+
+| Tool | What it does |
+|------|-------------|
+| `run_workflow` | Chain multiple macro steps, with optional screenshot after each |
+
+The assistant can use this to build pipelines like:
+1. Subtract background
+2. Apply threshold
+3. Screenshot to verify
+4. Count particles
+5. Return results
+
+**Example prompts:**
+```
+"Open the image, subtract background, threshold, count cells — show me a screenshot after each step."
+"Run a full segmentation workflow and show me the results."
+```
+
+---
+
+## Results and templates
+
+| Tool | What it does |
+|------|-------------|
+| `parse_macro_output` | Parse measurement results into structured data (JSON, table, numbers) |
+| `compare_screenshots` | Compare before/after screenshots with numeric diff metrics |
+| `list_macro_templates` | Browse built-in workflow templates |
+| `get_macro_template` | Get the macro code for a specific template |
+
+**Built-in template categories:** `filters`, `process`, `segment`, `analyze`, `image`, `annotate`, `channels`, `stack`, `plugins`
+
+**Example prompts:**
+```
+"List the available macro templates for segmentation"
+"Parse the results table and give me the mean area as a number"
+```
+
+---
+
+## Session
+
+| Tool | What it does |
+|------|-------------|
+| `get_session_trace` | Show a log of recent tool calls and open images |
+| `clear_session_trace` | Reset the session log |
