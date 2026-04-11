@@ -192,7 +192,7 @@ The server exposes **19** tools for Fiji/ImageJ automation:
 
 | Resource | Description |
 | -------- | ----------- |
-| [**Quick Start**](docs/quickstart.md) | Install, `FIJI_PATH`, all installer targets, demos, tests |
+| [**Install & quick start**](docs/quickstart.md) | Clone, venv, `pip install`, auto/manual MCP setup, verify |
 | [**MCP Tools**](docs/tools.md) | Full tool tables and parameters |
 | [**Configuration**](docs/configuration.md) | Env vars, troubleshooting, Cursor plugin |
 | [**Architecture**](docs/architecture.md) | Package layout and data flow |
