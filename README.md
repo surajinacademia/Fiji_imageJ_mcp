@@ -6,7 +6,7 @@
 
 **Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI assistants drive **Fiji / ImageJ** through natural language: run macros, search commands, open and save images, capture verification screenshots, and chain multi-step workflows. It is built with **PyImageJ**, **FastMCP**, and stdio MCP so the same server works from **Cursor**, **Claude Desktop**, **Claude Code**, **Gemini CLI**, **Windsurf**, and other MCP-capable hosts.
 
-<p align="center"><b>Two real Fiji runs</b> on bundled <code>demo_images/</code> — <code>open_image</code> → ImageJ macro → <code>screenshot_fiji</code> (<code>active_image</code>), headless. Regenerate: <code>python scripts/generate_readme_demo_assets.py</code> with <code>FIJI_PATH</code> and <code>FIJI_MODE=headless</code>.</p>
+<p align="center"><b>Three Fiji examples</b> on bundled <code>demo_images/</code> — <code>open_image</code> → macros / Java <code>ParticleAnalyzer</code> → <code>screenshot_fiji</code> (headless). Regenerate: <code>python scripts/generate_readme_demo_assets.py</code> with <code>FIJI_PATH</code> and <code>FIJI_MODE=headless</code>.</p>
 
 <p align="center">
   <table>
@@ -42,6 +42,31 @@
           <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg" alt="Example 2: after Find Edges" width="100%" />
         </a>
         <p align="center"><em>After <code>Find Edges</code></em></p>
+      </td>
+    </tr>
+    <tr>
+      <th align="center" colspan="2">Example 3 — <code>demo_images/img10.png</code> → threshold + <b>cell count &amp; morphology</b> (Java <code>ParticleAnalyzer</code>, headless-safe)</th>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_input.jpg">
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_input.jpg" alt="Example 3: fluorescence input" width="100%" />
+        </a>
+        <p align="center"><em>Input</em></p>
+      </td>
+      <td align="center" width="50%">
+        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_overlay.jpg">
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_overlay.jpg" alt="Example 3: particle overlay outlines" width="100%" />
+        </a>
+        <p align="center"><em>Detected objects with overlay outlines</em> (Area, Mean, Perimeter, Circularity, Feret’s)</p>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" colspan="2">
+        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_results.jpg">
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_results.jpg" alt="Example 3: per-object measurements table" width="95%" />
+        </a>
+        <p align="center"><em>Per-particle measurements (same run; rasterized from the ImageJ <code>ResultsTable</code>)</em></p>
       </td>
     </tr>
   </table>
