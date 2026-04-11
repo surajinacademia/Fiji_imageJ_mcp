@@ -1,0 +1,5 @@
+* [Home](/)
+* [Quick Start](quickstart.md)
+* [MCP Tools](tools.md)
+* [Configuration](configuration.md)
+* [Architecture](architecture.md)

@@ -1,0 +1,10 @@
+include LICENSE
+include README.md
+include CHANGELOG.md
+include pyproject.toml
+
+recursive-include src/fiji_mcp *.py
+recursive-include src/fiji_mcp *.json
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude tests *
