@@ -10,20 +10,22 @@
   <table>
     <tr>
       <td align="center" width="50%">
-        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/active_image.jpg">
-          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/active_image.jpg" alt="Active image view in Fiji" width="100%" />
+        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png">
+          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png" alt="Fluorescence microscopy: cytoplasm and nuclei" width="100%" />
         </a>
-        <sub><b>Active image</b> — <code>screenshot_fiji</code> (<code>active_image</code>)</sub>
+        <sub><b>Widefield fluorescence</b> — cytoplasm (green) and nuclei (blue); typical input you can open with <code>open_image</code> and process in Fiji</sub>
       </td>
       <td align="center" width="50%">
-        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/results_table.jpg">
-          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/results_table.jpg" alt="Results table rendered from Measure" width="100%" />
+        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png">
+          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png" alt="Same field with segmentation-style overlays" width="100%" />
         </a>
-        <sub><b>Results table</b> — Measure/Results render for reproducible reporting</sub>
+        <sub><b>Analysis overlay</b> — boundaries and labels; Fiji MCP can drive the macros, measurements, and <code>screenshot_fiji</code> steps behind similar workflows</sub>
       </td>
     </tr>
   </table>
 </p>
+
+<p align="center"><sub>Hero frames are from the <a href="https://github.com/surajinacademia/cellpose_mcp">cellpose_mcp</a> poster assets (same author) to show realistic microscopy; <strong>Fiji MCP</strong> targets ImageJ/Fiji automation on <em>your</em> paths and plugins.</sub></p>
 
 > **Note:** Same MCP-install pattern as [napari-mcp](https://napari-hub.org/plugins/napari-mcp.html). Sibling project: [**cellpose_mcp**](https://github.com/surajinacademia/cellpose_mcp). Contributions welcome — **ssahu2@ucmerced.edu**.
 

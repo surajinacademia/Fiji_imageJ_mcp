@@ -10,16 +10,22 @@
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/active_image.jpg" alt="Active image" width="100%" />
-        <sub><b>Active image</b> — <code>screenshot_fiji</code> (<code>active_image</code>)</sub>
+        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png">
+          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png" alt="Fluorescence microscopy: cytoplasm and nuclei" width="100%" />
+        </a>
+        <sub><b>Widefield fluorescence</b> — cytoplasm and nuclei; open with <code>open_image</code>, then run macros and measurements in Fiji</sub>
       </td>
       <td align="center" width="50%">
-        <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/results_table.jpg" alt="Results table" width="100%" />
-        <sub><b>Results table</b> — Measure/Results render</sub>
+        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png">
+          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png" alt="Same field with analysis overlays" width="100%" />
+        </a>
+        <sub><b>Overlay view</b> — labels and boundaries; use <code>screenshot_fiji</code> and batch tools to document comparable pipelines</sub>
       </td>
     </tr>
   </table>
 </p>
+
+<p align="center"><sub>Images from the <a href="https://github.com/surajinacademia/cellpose_mcp">cellpose_mcp</a> poster (same author), illustrating realistic microscopy; Fiji MCP is the ImageJ/Fiji MCP server.</sub></p>
 
 > **Note:** Same MCP-install pattern as [napari-mcp](https://napari-hub.org/plugins/napari-mcp.html). Sibling project: [**cellpose_mcp**](https://github.com/surajinacademia/cellpose_mcp). Contact: [ssahu2@ucmerced.edu](mailto:ssahu2@ucmerced.edu).
 
