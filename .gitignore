@@ -1,0 +1,19 @@
+# Local environments
+.conda-fiji-mcp/
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store

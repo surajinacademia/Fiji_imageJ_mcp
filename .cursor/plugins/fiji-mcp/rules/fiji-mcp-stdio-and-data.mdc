@@ -1,0 +1,12 @@
+---
+description: Fiji MCP uses stdio JSON-RPC; forbid ImageJ print() in macros and respect FIJI_DATA_ROOTS for open/save paths when editing macros or MCP config.
+globs: ["**/*.ijm", "**/.cursor/mcp.json"]
+alwaysApply: false
+---
+
+# Fiji MCP — stdio and data paths
+
+- The MCP server speaks **JSON-RPC on stdout**. ImageJ **`print()`** writes to stdout and **breaks** the session. Use **`return "...";`** (or equivalent) so metrics leave via the tool result, not the log stream.
+- When **`FIJI_DATA_ROOTS`** is set on the server process, **`open_image`** and **`save_image`** paths must stay under one of those roots. Do not assume arbitrary filesystem access.
+- Prefer **`FIJI_MODE=headless`** in Cursor unless GUI capture is required and a display is available.
+- Set **`PYTHONUNBUFFERED=1`** for the MCP subprocess in Cursor MCP JSON when possible.

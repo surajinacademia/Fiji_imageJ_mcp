@@ -1,0 +1,16 @@
+{
+  "plugins": {
+    "create-plugin": {
+      "enabled": true
+    },
+    "superpowers": {
+      "enabled": true
+    },
+    "huggingface-skills": {
+      "enabled": true
+    },
+    "parallel": {
+      "enabled": true
+    }
+  }
+}

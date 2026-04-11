@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fiji-mcp-server"
+version = "0.1.0"
+description = "MCP server for Fiji/ImageJ plugin discovery and execution"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Suraj Sahu" }]
+keywords = ["fiji", "imagej", "mcp", "pyimagej", "microscopy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+    "fastmcp>=2.10.3",
+    "pydantic>=2.7.0",
+    "pyimagej>=1.5.0",
+    "numpy>=1.26.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.2.0",
+]
+
+[project.scripts]
+fiji-mcp-server = "fiji_mcp.__main__:main"
+fiji-mcp-install = "fiji_mcp.cli.install:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = ["-q", "--tb=short"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: integration tests requiring local Fiji runtime",
+]
