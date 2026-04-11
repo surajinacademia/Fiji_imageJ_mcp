@@ -1,6 +1,6 @@
 # Publish sdist + wheel to PyPI when a GitHub Release is published.
 # Configure PyPI: https://docs.pypi.org/trusted-publishers/adding-a-publisher/
-# (GitHub → surajinacademia/Fiji_imageJ_mcp → workflow "Publish to PyPI" on environment release)
+# PyPI trusted publisher: workflow filename publish-pypi.yml (see RELEASING.md).
 
 name: Publish to PyPI
 

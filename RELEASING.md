@@ -14,7 +14,7 @@
 2. **Trusted Publisher (recommended):** [PyPI → Publishing → Add a pending publisher](https://docs.pypi.org/trusted-publishers/)  
    - Owner: `surajinacademia`  
    - Repository: `Fiji_imageJ_mcp`  
-   - Workflow: `Publish to PyPI`  
+   - Workflow **filename** (required): `publish-pypi.yml` — not the workflow title “Publish to PyPI”.  
    - Environment: leave blank unless you add a GitHub Environment and match it here.
 3. Alternatively, create an **API token** and add repo secret **`PYPI_API_TOKEN`**, then uncomment the `with: password:` block in [`.github/workflows/publish-pypi.yml`](.github/workflows/publish-pypi.yml).
 
@@ -25,6 +25,14 @@
 3. The **Publish to PyPI** workflow runs on `release: published`, builds with `python -m build`, and uploads the sdist + wheel.
 
 You can re-run a failed publish from the **Actions** tab via **workflow_dispatch** on **Publish to PyPI**.
+
+### If PyPI says `invalid-publisher`
+
+The publisher on PyPI must match [GitHub’s OIDC claims](https://docs.pypi.org/trusted-publishers/troubleshooting/). Typical fixes:
+
+- Use workflow file **`publish-pypi.yml`**, not the display name `Publish to PyPI`.
+- Project name on PyPI must be **`fiji-mcp-server`** (same as `pyproject.toml` `[project].name`).
+- After fixing PyPI settings, re-run **Publish to PyPI** (workflow_dispatch); you do not need a new GitHub Release if the same version was not uploaded.
 
 ## Local dry run
 
