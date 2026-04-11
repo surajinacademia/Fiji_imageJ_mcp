@@ -67,9 +67,10 @@ cd Fiji_imageJ_mcp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[test]"
 fiji-mcp-install install cursor --fiji-path /Applications/Fiji
+# Also: claude-desktop, claude-code, gemini, windsurf — see docs/configuration.md
 ```
 
-Restart Cursor after configuring. Full steps and Claude Desktop: [**Quick Start**](docs/quickstart.md).
+Restart the client after configuring. Full matrix: [**Configuration**](docs/configuration.md) · [**Quick Start**](docs/quickstart.md).
 
 ---
 

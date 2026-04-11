@@ -2,17 +2,22 @@
 
 ## Auto-install (`fiji-mcp-install`)
 
-| Application | Command | Notes |
-|-------------|---------|--------|
-| **Cursor** | `fiji-mcp-install install cursor --fiji-path <ABS_PATH>` | Writes `~/.cursor/mcp.json`. Default **`FIJI_MODE=headless`**. |
-| **Claude Desktop** | `fiji-mcp-install install claude-desktop --fiji-path <ABS_PATH>` | Same merge pattern as napari-mcp. |
+| Application | Command | Config file |
+|-------------|---------|-------------|
+| **Cursor** | `fiji-mcp-install install cursor --fiji-path <ABS>` | `~/.cursor/mcp.json` |
+| **Claude Desktop** | `fiji-mcp-install install claude-desktop --fiji-path <ABS>` | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; Linux/Windows: see [Anthropic docs](https://support.anthropic.com/) |
+| **Claude Code** (user) | `fiji-mcp-install install claude-code --fiji-path <ABS>` | `~/.claude.json` → top-level `mcpServers` ([Claude Code MCP](https://code.claude.com/docs/en/mcp)) |
+| **Claude Code** (project) | `fiji-mcp-install install claude-code --fiji-path <ABS> --project <DIR>` | `<DIR>/.mcp.json` (commit-friendly team scope) |
+| **Gemini CLI** | `fiji-mcp-install install gemini --fiji-path <ABS>` | `~/.gemini/settings.json` → `mcpServers` ([Gemini CLI MCP](https://geminicli.com/docs/tools/mcp-server/)) |
+| **Windsurf** | `fiji-mcp-install install windsurf --fiji-path <ABS>` | `~/.codeium/windsurf/mcp_config.json` ([Windsurf MCP](https://docs.windsurf.com/windsurf/cascade/mcp)) |
 
 Options:
 
 - `--mode` — `gui`, `headless`, `auto`, or `smart` (default `headless`).
-- `--command` — absolute path to `fiji-mcp-server` if the GUI app’s PATH does not see your venv.
+- `--command` — absolute path to `fiji-mcp-server` if the host app’s PATH does not see your venv.
+- `--project DIR` — **only with `claude-code`:** write project-scoped `.mcp.json` under `DIR` instead of user `~/.claude.json`.
 
-Restart Cursor or Claude after changing MCP config.
+Restart the IDE or CLI after changing MCP config.
 
 ## Manual MCP JSON
 
@@ -35,6 +40,9 @@ Use the Python executable from the environment where `fiji-mcp-server` / `fiji_m
 ```
 
 - **Cursor:** `~/.cursor/mcp.json` or project `.cursor/mcp.json`.
+- **Claude Code:** user merge goes to `~/.claude.json`; project merge to `.mcp.json` (see table above).
+- **Gemini CLI:** `~/.gemini/settings.json` may already contain other keys; the installer only merges `mcpServers.fiji`.
+- **Windsurf:** same JSON shape as Cursor (`mcpServers` with `command` / `args` / `env`).
 - **`PYTHONUNBUFFERED=1`:** keeps stdio JSON-RPC lines flushing promptly.
 
 An example file lives at [`.mcp.json`](../.mcp.json) in the repository (edit `FIJI_PATH` and `command` for your machine).

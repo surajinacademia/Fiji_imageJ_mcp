@@ -19,6 +19,10 @@ python -m fiji_mcp
 # Write MCP config (requires absolute Fiji install root)
 fiji-mcp-install install cursor --fiji-path /Applications/Fiji
 fiji-mcp-install install claude-desktop --fiji-path /Applications/Fiji
+fiji-mcp-install install claude-code --fiji-path /Applications/Fiji
+fiji-mcp-install install gemini --fiji-path /Applications/Fiji
+fiji-mcp-install install windsurf --fiji-path /Applications/Fiji
+fiji-mcp-install install claude-code --fiji-path /Applications/Fiji --project .
 
 # Tests (CI excludes integration)
 pytest -m "not integration"

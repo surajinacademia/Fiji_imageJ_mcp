@@ -23,16 +23,21 @@ For the same **dev tooling** as [cellpose_mcp](https://github.com/surajinacademi
 
 Set **`FIJI_PATH`** to the **installation root** (not only the nested `.app` path on macOS), for example `/Applications/Fiji` when that folder contains `jars/` and `plugins/`.
 
-## Configure Cursor or Claude Desktop
+## Configure your editor or CLI
 
 Use the **same** Python where you installed the package:
 
 ```bash
 fiji-mcp-install install cursor --fiji-path /Applications/Fiji
 fiji-mcp-install install claude-desktop --fiji-path /Applications/Fiji
+fiji-mcp-install install claude-code --fiji-path /Applications/Fiji
+fiji-mcp-install install gemini --fiji-path /Applications/Fiji
+fiji-mcp-install install windsurf --fiji-path /Applications/Fiji
+# Claude Code project-scoped (creates <DIR>/.mcp.json):
+fiji-mcp-install install claude-code --fiji-path /Applications/Fiji --project .
 ```
 
-Defaults use **`FIJI_MODE=headless`** (recommended inside IDE MCP). Restart the app after writing config.
+Defaults use **`FIJI_MODE=headless`** (recommended inside IDE / CLI MCP). Restart the app or CLI after writing config.
 
 Details: [Configuration](configuration.md).
 
