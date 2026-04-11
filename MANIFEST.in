@@ -4,6 +4,8 @@ include CHANGELOG.md
 include RELEASE_NOTES_v0.1.0.md
 include CLAUDE.md
 include pyproject.toml
+include install.sh
+recursive-include scripts *.py
 
 recursive-include src/fiji_mcp *.py
 recursive-include src/fiji_mcp *.json

@@ -55,14 +55,15 @@
 
 **Minimal path:**
 
-1. **Install** — Python **3.10+**, [**Fiji**](https://fiji.sc/) (install root with `jars/` + `plugins/`), matching **Java**. Then:
+1. **Install** — Python **3.10+**, [**Fiji**](https://fiji.sc/) (install root with `jars/` + `plugins/`), matching **Java** (needed for PyImageJ / jpype1). Clone the repo, then **one command** creates `.venv` and installs **all Python dependencies** (FastMCP, PyImageJ, NumPy, …) via `pip`:
    ```bash
    git clone https://github.com/surajinacademia/Fiji_imageJ_mcp.git && cd Fiji_imageJ_mcp
-   python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   pip install -e ".[test]"
+   python3 scripts/install_fiji_mcp.py
    ```
-2. **Configure** — same venv, absolute Fiji path, restart the client:
+   (`./install.sh` does the same.) Add `--with-tests` if you want pytest. See [**docs/quickstart.md**](docs/quickstart.md) for `pip install git+…` and other options.
+2. **Configure** — activate `.venv`, set absolute Fiji path, restart the client:
    ```bash
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
    fiji-mcp-install install cursor --fiji-path /Applications/Fiji
    ```
 3. **Try** — in chat: *“Run the Fiji MCP `health_check` tool.”* Optional terminal smoke: `FIJI_PATH=… FIJI_MODE=headless python scripts/demo_fiji_mcp_session.py`
@@ -71,7 +72,7 @@
 
 ### Auto-Configure Your AI Application
 
-After `pip install -e ".[test]"` (or a future PyPI install), run **`fiji-mcp-install install <target> --fiji-path <ABS>`**. It merges a `fiji` entry into the correct MCP JSON using **`python -m fiji_mcp`** from the interpreter next to `fiji-mcp-server` (when possible).
+After **`python scripts/install_fiji_mcp.py`** (or `pip install -e .` / a future PyPI install), run **`fiji-mcp-install install <target> --fiji-path <ABS>`**. It merges a `fiji` entry into the correct MCP JSON using **`python -m fiji_mcp`** from the interpreter next to `fiji-mcp-server` (when possible).
 
 | Application | Command | Notes |
 | ----------- | ------- | ----- |

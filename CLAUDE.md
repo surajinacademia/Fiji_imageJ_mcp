@@ -9,7 +9,10 @@ Guidance for Claude Code and similar agents working in this repository.
 ## Common commands
 
 ```bash
-# Development install (tests + linters)
+# Easiest local bootstrap (venv + all runtime deps; add --with-tests for pytest)
+python scripts/install_fiji_mcp.py
+
+# Development install (tests + linters) if you manage the venv yourself
 pip install -e ".[test,dev]"
 
 # Run the MCP server (stdio)

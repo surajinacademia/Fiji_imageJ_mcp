@@ -158,6 +158,7 @@ convention = "numpy"
 "src/fiji_mcp/tools/macro_runner.py" = ["B008"]
 "src/fiji_mcp/tools/workflow.py" = ["B008"]
 "src/fiji_mcp/cli/install.py" = ["S603", "S607"]
+"scripts/install_fiji_mcp.py" = ["S603", "UP036"]
 "tests/**" = ["S101", "S106", "S311", "D", "B017"]
 
 [tool.ruff.format]

@@ -1,6 +1,6 @@
 # Install and quick start
 
-Three steps: **install the Python package** → **tell the MCP client where Fiji lives** → **confirm it works**.
+Three steps: **install Python + dependencies** → **point MCP at Fiji** → **confirm it works**.
 
 ---
 
@@ -8,44 +8,73 @@ Three steps: **install the Python package** → **tell the MCP client where Fiji
 
 | You need | Notes |
 | -------- | ----- |
-| **Python 3.10+** | Use a venv or conda env dedicated to this project. |
-| **Fiji** | [fiji.sc](https://fiji.sc/) — the folder you pass later must contain **`jars/`** and **`plugins/`** (installation root, not only a nested `.app` bundle path on macOS). |
-| **Java** | Same major line your Fiji build expects. |
+| **Python 3.10+** | On your PATH as `python3` / `python`. |
+| **Network** | `pip` downloads packages from PyPI (FastMCP, PyImageJ, NumPy, …). |
+| **Fiji** | [fiji.sc](https://fiji.sc/) — later you pass the **installation root** (folder with `jars/` and `plugins/`). |
+| **Java (JDK)** | Required when PyImageJ / **jpype1** first builds or runs against your Fiji. Install before or right after the Python install if `pip install` fails on `jpype1`. |
 
-For normal IDE / CLI use, **`FIJI_MODE=headless`** is enough (no desktop required for `active_image` / `results_table` screenshots). Use **`gui`** only if you need full-screen Robot capture.
+For IDE / CLI MCP, default **`FIJI_MODE=headless`** is enough (no desktop for `active_image` / `results_table` screenshots).
 
 ---
 
-## 2. Install (from source)
+## 2. Install (easiest: one script)
 
-**Method:** clone the repo, create a venv, install in editable mode.
+**Clone once**, then run the installer from the repo root. It creates **`.venv`**, upgrades **pip / setuptools / wheel**, and runs **`pip install -e .`**, which pulls **every runtime dependency** from `pyproject.toml` (you do not need to list packages yourself).
 
 ```bash
 git clone https://github.com/surajinacademia/Fiji_imageJ_mcp.git
 cd Fiji_imageJ_mcp
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -U pip setuptools wheel
-pip install -e ".[test]"
+python3 scripts/install_fiji_mcp.py
 ```
 
-Check that the CLI is on your PATH (same shell as above):
+Or the same thing via shell wrapper:
 
 ```bash
+chmod +x install.sh   # once, if needed
+./install.sh
+```
+
+**Options:**
+
+| Flag | Meaning |
+| ---- | -------- |
+| `--venv .venv` | Virtualenv path (default: `.venv`) |
+| `--with-tests` | Also install pytest extras (`pip install -e .[test]`) |
+| `--into-current` | No new venv; install into the **active** Python (use only inside a venv you already created) |
+
+**Alternative — already inside your own venv:**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python scripts/install_fiji_mcp.py --into-current
+```
+
+**Alternative — one `pip` line from GitHub** (installs into the **current** environment; use a venv first):
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+python -m pip install -U pip setuptools wheel
+python -m pip install "git+https://github.com/surajinacademia/Fiji_imageJ_mcp.git"
+```
+
+After any method, check:
+
+```bash
+source .venv/bin/activate   # if you use .venv
 fiji-mcp-install --help
 python -m fiji_mcp --help
 ```
-
-*(There is no PyPI one-liner yet; installs are from this repository.)*
 
 ---
 
 ## 3. Configure your MCP client
 
-**Method A — auto-install (recommended)**  
-Run **`fiji-mcp-install`** with the **absolute** Fiji root and your **target** app. Use the **same** venv you used for `pip install` (so `python` there has `pyimagej` / `fiji_mcp`).
+Use the **same** Python that has `fiji_mcp` (the `.venv` you just created, unless you used `--into-current` elsewhere).
 
-Replace `/Applications/Fiji` with your real path.
+Replace `/Applications/Fiji` with your real Fiji root.
+
+**Method A — auto-install (recommended)**
 
 ```bash
 # Pick one:
@@ -60,24 +89,23 @@ fiji-mcp-install install claude-code --fiji-path /Applications/Fiji --project /p
 ```
 
 Defaults: **`FIJI_MODE=headless`**, **`PYTHONUNBUFFERED=1`**.  
-Optional: `--mode gui`, or `--command /full/path/to/venv/bin/fiji-mcp-server` if the GUI app cannot see your venv.
+Optional: `--mode gui`, or `--command /full/path/to/.venv/bin/fiji-mcp-server` if the host app does not see your venv.
 
-**Then restart** Cursor, Claude, Windsurf, or the Gemini CLI so it reloads MCP config.
+**Restart** the editor or CLI, then continue to §4.
 
-**Method B — paste JSON yourself**  
-Same shape everywhere: `mcpServers.fiji` with `command` + `args: ["-m", "fiji_mcp"]` + `env` (`FIJI_PATH`, `FIJI_MODE`, `PYTHONUNBUFFERED`). See [Configuration](configuration.md) for paths per app and a full example.
+**Method B — paste JSON** — same `mcpServers.fiji` shape everywhere; see [Configuration](configuration.md).
 
 ---
 
 ## 4. Quick verification
 
-**In the AI chat** (after restart), try:
+In chat:
 
 ```text
 Call the Fiji MCP health_check tool
 ```
 
-**From the terminal** (optional smoke script; needs `FIJI_PATH`):
+Optional terminal smoke (needs `FIJI_PATH`):
 
 ```bash
 export FIJI_PATH=/Applications/Fiji
@@ -85,7 +113,7 @@ export FIJI_MODE=headless
 python scripts/demo_fiji_mcp_session.py
 ```
 
-First JVM start can take **30–90 seconds**; later calls are usually fast.
+First JVM start is often **30–90 seconds**; later calls are faster.
 
 ---
 
@@ -93,13 +121,13 @@ First JVM start can take **30–90 seconds**; later calls are usually fast.
 
 | Topic | Doc |
 | ----- | --- |
-| All env vars, troubleshooting, Cursor plugin | [Configuration](configuration.md) |
-| Every MCP tool | [MCP Tools](tools.md) |
+| Env vars, troubleshooting, Cursor plugin | [Configuration](configuration.md) |
+| All MCP tools | [MCP Tools](tools.md) |
 | Package layout | [Architecture](architecture.md) |
 | Batch report over stdio MCP | [Batch report workflow](batch_report_workflow.md) |
-| Roadmap / internals | [plan.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md) |
+| Roadmap | [plan.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md) |
 
-**Developers:** `pip install -e ".[dev]"` and `pre-commit install` for Ruff / format hooks (see repo `README.md`).
+**Developers:** after `python scripts/install_fiji_mcp.py --with-tests`, run `pip install -e ".[dev]"` and `pre-commit install` if you use repo hooks.
 
 ---
 
@@ -109,4 +137,4 @@ First JVM start can take **30–90 seconds**; later calls are usually fast.
 pytest -m "not integration"
 ```
 
-Integration tests need **`FIJI_PATH`** and **`FIJI_TEST_IMAGE`** set; see [Configuration](configuration.md).
+Integration tests need **`FIJI_PATH`** and **`FIJI_TEST_IMAGE`** — see [Configuration](configuration.md).
