@@ -55,11 +55,11 @@ async def run_workflow(
     """Execute a multi-step workflow with optional screenshot verification."""
     if not steps:
         raise FijiToolError(
-            "steps is empty. Pass a list like [{\"macro\": \"run(\\\"Measure\\\");\"}]."
+            'steps is empty. Pass a list like [{"macro": "run(\\"Measure\\");"}].'
         )
 
     coerced_steps: list[WorkflowStepInput] = [
-        WorkflowStepInput.model_validate(s) if isinstance(s, dict) else cast(WorkflowStepInput, s)
+        WorkflowStepInput.model_validate(s) if isinstance(s, dict) else cast("WorkflowStepInput", s)
         for s in steps
     ]
 

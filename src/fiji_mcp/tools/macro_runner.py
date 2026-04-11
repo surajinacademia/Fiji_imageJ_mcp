@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 import scyjava as sj
@@ -127,7 +126,7 @@ def run_macro(macro_code: MacroCode, retries: RetryCount = 2) -> MacroRunResult:
     """Execute ImageJ macro code and return macro result/log context."""
     if not macro_code or not macro_code.strip():
         raise FijiToolError(
-            "macro_code is empty. Paste a non-empty macro body (e.g. run(\"Measure\");) and retry."
+            "macro_code is empty. Paste a non-empty macro body (e.g. run('Measure');) and retry."
         )
     _check_macro_length(macro_code)
 
@@ -242,7 +241,7 @@ async def run_batch_macros(
     """Run a group of macros as one batch operation."""
     if not macros:
         raise FijiToolError(
-            "macros list is empty. Pass at least one macro string (e.g. [\"run(\\\"Measure\\\");\"])."
+            'macros list is empty. Pass at least one macro string (e.g. ["run(\\"Measure\\");"]).'
         )
 
     results: list[BatchMacroStepSuccess | BatchMacroStepFailure] = []

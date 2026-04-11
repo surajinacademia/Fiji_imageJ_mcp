@@ -1,0 +1,9 @@
+[run]
+source = src/fiji_mcp
+omit =
+    */tests/*
+    */__main__.py
+
+[report]
+show_missing = true
+skip_covered = true

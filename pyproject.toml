@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=64", "setuptools_scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Suraj Sahu", email = "ssahu2@ucmerced.edu" }]
+maintainers = [{ name = "Suraj Sahu", email = "ssahu2@ucmerced.edu" }]
 keywords = ["fiji", "imagej", "mcp", "pyimagej", "microscopy"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -41,7 +42,17 @@ test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.2.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.12.0",
 ]
+dev = [
+    "ruff>=0.12.10",
+    "mypy>=1.17.0",
+    "black>=24.0.0",
+    "pre-commit>=4.3.0",
+    "bandit>=1.8.6",
+]
+all = ["fiji-mcp-server[test,dev]"]
 
 [project.scripts]
 fiji-mcp-server = "fiji_mcp.__main__:main"
@@ -53,10 +64,114 @@ where = ["src"]
 [tool.setuptools.package-data]
 fiji_mcp = ["data/macro_templates.json"]
 
+[tool.setuptools_scm]
+write_to = "src/fiji_mcp/_version.py"
+fallback_version = "0.1.0"
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
+tag_regex = "^(?P<prefix>v)?(?P<version>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$"
+
 [tool.pytest.ini_options]
-addopts = ["-q", "--tb=short"]
+addopts = [
+    "-q",
+    "--strict-markers",
+    "--tb=short",
+    "--cov-config=.coveragerc",
+]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
     "integration: integration tests requiring local Fiji runtime",
+    "unit: marks unit tests",
+    "smoke: marks smoke tests for quick validation",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "*vendored*",
+    "*_vendor*",
+    "*_version.py",
+]
+fix = false
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "SIM",
+    "TCH",
+    "TID",
+    "Q",
+    "S",
+    "D",
+    "BLE",
+    "A",
+    "ISC",
+    "G",
+    "PIE",
+]
+ignore = [
+    "E501",
+    "BLE001",
+    "S101",
+    "S110",
+    "SIM105",
+    "SIM103",
+    "S108",
+    "TC003",
+    "TC001",
+    "TC002",
+    "D",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"src/fiji_mcp/server.py" = ["E402"]
+"src/fiji_mcp/tools/macro_runner.py" = ["B008"]
+"src/fiji_mcp/tools/workflow.py" = ["B008"]
+"src/fiji_mcp/cli/install.py" = ["S603", "S607"]
+"tests/**" = ["S101", "S106", "S311", "D", "B017"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

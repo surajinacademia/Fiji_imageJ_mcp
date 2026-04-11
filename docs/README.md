@@ -31,6 +31,7 @@
 - **[MCP Tools](tools.md)** — full tool catalog (19 tools)
 - **[Configuration](configuration.md)** — `fiji-mcp-install`, manual JSON, env vars, troubleshooting, Cursor plugin
 - **[Architecture](architecture.md)** — components, data flow, design notes
+- **[Batch report workflow](batch_report_workflow.md)** — stdio MCP batch report script
 
 Repository README (GitHub landing): [github.com/surajinacademia/Fiji_imageJ_mcp](https://github.com/surajinacademia/Fiji_imageJ_mcp).
 

@@ -17,6 +17,8 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[test]"
 ```
 
+For the same **dev tooling** as [cellpose_mcp](https://github.com/surajinacademia/cellpose_mcp) (Ruff, Black, Mypy, pre-commit hooks): `pip install -e ".[dev]"` then `pre-commit install`.
+
 ## Point the server at Fiji
 
 Set **`FIJI_PATH`** to the **installation root** (not only the nested `.app` path on macOS), for example `/Applications/Fiji` when that folder contains `jars/` and `plugins/`.

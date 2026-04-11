@@ -31,7 +31,7 @@ def test_resolve_user_path_expands_home(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setenv("HOME", str(tmp_path))
     p = tmp_path / "img.tif"
     p.write_bytes(b"x")
-    resolved = resolve_user_path(f"~/img.tif")
+    resolved = resolve_user_path("~/img.tif")
     assert resolved == p.resolve()
 
 

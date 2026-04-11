@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FastMCP stdio server for Fiji/ImageJ via PyImageJ (`fiji-mcp-server`, `python -m fiji_mcp`).
 - **19 MCP tools**: macros, batch macros, open/save image, screenshots (`full_screen`, `active_image`, `results_table`), command discovery, workflows, session trace helpers, and macro templates.
 - `fiji-mcp-install` for **Cursor** and **Claude Desktop** (`--fiji-path`, `--mode`, optional `--command`).
-- CI workflow (pytest unit tests on Python 3.10–3.12; integration excluded in CI).
-- Documentation site under `docs/` (Docsify: Quick Start, Tools, Configuration, Architecture).
+- CI workflow (pytest unit tests on Python 3.10–3.12; integration excluded in CI); **Ruff** lint job; **concurrency** group (cellpose-style).
+- Documentation site under `docs/` (Docsify: Quick Start, Tools, Configuration, Architecture, batch report workflow).
 - Example project MCP config in `.mcp.json` (placeholder `FIJI_PATH`; adjust for your machine).
+- **Packaging / dev parity with [cellpose_mcp](https://github.com/surajinacademia/cellpose_mcp):** `LICENSE`, `MANIFEST.in`, `.python-version`, `.coveragerc`, `.pre-commit-config.yaml`, `CLAUDE.md`, `Fiji_imageJ_mcp.code-workspace`, `RELEASE_NOTES_v0.1.0.md`, `[project.optional-dependencies] dev` / `all`, Ruff / Black / Mypy, `pytest-cov` / markers, **`setuptools_scm`** + `src/fiji_mcp/_version.py`, **`[project.urls]`** and **maintainers** in `pyproject.toml`.
+- Package **`__version__`** exposed from `fiji_mcp`.

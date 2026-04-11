@@ -6,3 +6,5 @@ configure_server_logging()
 
 from fiji_mcp.mcp_instance import mcp
 from fiji_mcp.tools import discovery, macro_runner, screenshot, workflow  # noqa: F401
+
+__all__ = ["mcp"]

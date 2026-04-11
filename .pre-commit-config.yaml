@@ -1,0 +1,43 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.10
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-Pillow
+        args: [--ignore-missing-imports]
+        files: ^src/
+
+  - repo: local
+    hooks:
+      - id: pytest-quick
+        name: Quick pytest smoke tests
+        entry: bash -c 'if command -v pytest &> /dev/null; then pytest tests/test_package_exports.py -q --tb=short -x 2>/dev/null || true; fi'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: false

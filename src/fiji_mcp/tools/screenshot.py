@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 from typing import Annotated, Literal
 
-import numpy as np
 import scyjava as sj
 from mcp.types import ToolAnnotations
 from PIL import Image, ImageDraw, ImageFont

@@ -1,6 +1,8 @@
 include LICENSE
 include README.md
 include CHANGELOG.md
+include RELEASE_NOTES_v0.1.0.md
+include CLAUDE.md
 include pyproject.toml
 
 recursive-include src/fiji_mcp *.py

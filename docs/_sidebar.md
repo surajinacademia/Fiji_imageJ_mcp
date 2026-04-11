@@ -3,3 +3,4 @@
 * [MCP Tools](tools.md)
 * [Configuration](configuration.md)
 * [Architecture](architecture.md)
+* [Batch report workflow](batch_report_workflow.md)

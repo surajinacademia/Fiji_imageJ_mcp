@@ -37,6 +37,7 @@
 | [**MCP Tools**](docs/tools.md) | All **19** tools (macros, screenshots, discovery, workflows) |
 | [**Configuration**](docs/configuration.md) | Env vars, manual JSON, troubleshooting, optional Cursor plugin |
 | [**Architecture**](docs/architecture.md) | Data flow, package layout, design notes |
+| [**Batch report**](docs/batch_report_workflow.md) | `generate_image_analysis_report.py` over stdio MCP |
 
 **Browse locally:** open [`docs/index.html`](docs/index.html) with [Docsify](https://docsify.js.org/) (`npx docsify serve docs`) for a searchable sidebar site—the same layout as [cellpose_mcp/docs](https://github.com/surajinacademia/cellpose_mcp/tree/main/docs).
 
@@ -70,9 +71,12 @@ Restart Cursor after configuring. Full steps and Claude Desktop: [**Quick Start*
 
 ---
 
-## Changelog
+## Changelog and releases
 
-See [**CHANGELOG.md**](CHANGELOG.md).
+- [**CHANGELOG.md**](CHANGELOG.md) — version history (Keep a Changelog)
+- [**RELEASE_NOTES_v0.1.0.md**](RELEASE_NOTES_v0.1.0.md) — first packaging-aligned release notes
+
+Developer onboarding for Claude Code: [**CLAUDE.md**](CLAUDE.md). Optional [**pre-commit**](https://pre-commit.com/) config: `.pre-commit-config.yaml` (`pip install -e ".[dev]" && pre-commit install`).
 
 ---
 
