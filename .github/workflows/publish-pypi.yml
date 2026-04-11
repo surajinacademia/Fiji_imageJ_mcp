@@ -42,7 +42,8 @@ jobs:
           bash scripts/verify_sdist_contents.sh
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        # Pinned to v1.14.0 (2026-04-07); bump SHA when upgrading: https://github.com/pypa/gh-action-pypi-publish/releases
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         # PyPI Trusted Publishing (OIDC). If not configured, add a repo secret
         # PYPI_API_TOKEN and uncomment:
         # with:

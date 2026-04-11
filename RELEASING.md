@@ -26,6 +26,8 @@
 
 You can re-run a failed publish from the **Actions** tab via **workflow_dispatch** on **Publish to PyPI**.
 
+The **Publish to PyPI** workflow pins **`pypa/gh-action-pypi-publish`** to a **full commit SHA** (see [`.github/workflows/publish-pypi.yml`](.github/workflows/publish-pypi.yml)). When upgrading the action, replace that SHA with the commit for the desired [release tag](https://github.com/pypa/gh-action-pypi-publish/releases).
+
 ### If PyPI says `invalid-publisher`
 
 The publisher on PyPI must match [GitHub’s OIDC claims](https://docs.pypi.org/trusted-publishers/troubleshooting/). Typical fixes:
