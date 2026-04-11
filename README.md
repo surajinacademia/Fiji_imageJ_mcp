@@ -9,8 +9,7 @@
 
 Open images, run any ImageJ plugin, count cells, measure features, take screenshots to verify — without writing a single line of macro code yourself.
 
-<!-- Demo images use absolute GitHub raw URLs so they render on PyPI (relative ./demo_output paths do not). -->
-<!-- Repo: https://github.com/surajinacademia/Fiji_imageJ_mcp -->
+<!-- Demo images: absolute raw.githubusercontent.com URLs + Markdown tables (PyPI does not host ./demo_output; raw HTML <img> is less reliable in Warehouse). -->
 
 ---
 
@@ -18,17 +17,15 @@ Open images, run any ImageJ plugin, count cells, measure features, take screensh
 
 **"Open the image, apply a Gaussian blur, show me before and after."**
 
-<p>
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" width="49%" alt="before blur" />
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_processed.jpg" width="49%" alt="after blur" />
-</p>
+| Before | After |
+| :---: | :---: |
+| ![Gaussian blur — input](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg) | ![Gaussian blur — output](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_processed.jpg) |
 
 **"Threshold the bright spots, outline each object, report area and circularity."**
 
-<p>
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_input.jpg" width="49%" alt="input blobs" />
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_overlay.jpg" width="49%" alt="outlined objects" />
-</p>
+| Input | Outlined objects |
+| :---: | :---: |
+| ![Particles — input](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_input.jpg) | ![Particles — outlines](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_overlay.jpg) |
 
 | # | Area | Circularity |
 | ---: | ---: | ---: |
@@ -39,10 +36,9 @@ Open images, run any ImageJ plugin, count cells, measure features, take screensh
 
 **"Skeletonize the mask and summarize branches per tree."**
 
-<p>
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_input.jpg" width="49%" alt="mask" />
-  <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_skeleton.jpg" width="49%" alt="skeleton" />
-</p>
+| Mask | Skeleton |
+| :---: | :---: |
+| ![Skeleton — input mask](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_input.jpg) | ![Skeleton — midlines](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_skeleton.jpg) |
 
 | Tree | Branches | Junctions |
 | ---: | ---: | ---: |

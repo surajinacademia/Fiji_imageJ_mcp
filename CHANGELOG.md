@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-11
+
+### Changed
+
+- **README / PyPI:** demo gallery uses **Markdown image syntax inside tables** (not raw `<p><img>` HTML) so Warehouse renders reliably; same `raw.githubusercontent.com` asset URLs.
+
 ## [0.1.2] - 2026-04-11
 
 ### Added

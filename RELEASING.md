@@ -2,7 +2,7 @@
 
 ## Version bump
 
-1. Update **`version`** in [`pyproject.toml`](pyproject.toml) (PEP 440, e.g. `0.1.2`).
+1. Update **`version`** in [`pyproject.toml`](pyproject.toml) (PEP 440, e.g. `0.1.3`).
 2. Update **[`CHANGELOG.md`](CHANGELOG.md)** — move items from *Unreleased* into a dated section for that version.
 3. Optional: add or refresh **`RELEASE_NOTES_vX.Y.Z.md`** for GitHub Release notes text.
 
@@ -21,7 +21,7 @@
 ## GitHub Release → PyPI
 
 1. Commit the version + changelog on `main` and push.
-2. On GitHub: **Releases → Draft a new release** — create a new tag **`v0.1.2`** (must match the version you intend to ship), title e.g. `v0.1.2`, publish the release.
+2. On GitHub: **Releases → Draft a new release** — create a new tag **`v0.1.3`** (must match the version you intend to ship), title e.g. `v0.1.3`, publish the release.
 3. The **Publish to PyPI** workflow runs on `release: published`, builds with `python -m build`, and uploads the sdist + wheel.
 
 You can re-run a failed publish from the **Actions** tab via **workflow_dispatch** on **Publish to PyPI**.
