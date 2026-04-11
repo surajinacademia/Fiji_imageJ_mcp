@@ -25,6 +25,7 @@ Local plugins **do not** show up as a separate “Fiji MCP” marketplace tile. 
 ## What you get
 
 - **Skill** `fiji-mcp-workflow`: env vars, stdio-safe macro rules, suggested MCP tool order for batch analysis, and optional batch-report flow when your checkout includes the upstream script.
+- **Skill** `fiji-mcp-image-analysis`: batch / report workflow over MCP (`generate_image_analysis_report.py` or the same tool sequence in chat).
 - **Rule** `fiji-mcp-stdio-and-data`: reminders for `print()` vs stdout and `FIJI_DATA_ROOTS` when editing macros or MCP JSON.
 - **Command** `/fiji-mcp-cursor-json`: Cursor `mcp.json` snippet with placeholders (no machine-specific paths).
 
@@ -43,11 +44,11 @@ Environment variables, `fiji-mcp-install`, and production notes are documented i
 
 ## Copy from this repo
 
-This project also keeps a mirror at `.cursor/plugins/fiji-mcp/`. To (re)install into Cursor’s local folder:
+The plugin source is tracked at **`extras/cursor-fiji-mcp-plugin/`** (not under `.cursor/`, which stays local-only). To (re)install into Cursor’s local folder:
 
 ```bash
 rm -rf ~/.cursor/plugins/local/fiji-mcp
-cp -R /path/to/Fiji_imageJ_mcp/.cursor/plugins/fiji-mcp ~/.cursor/plugins/local/fiji-mcp
+cp -R /path/to/Fiji_imageJ_mcp/extras/cursor-fiji-mcp-plugin ~/.cursor/plugins/local/fiji-mcp
 ```
 
 Then **Developer: Reload Window**.

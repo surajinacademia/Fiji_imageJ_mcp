@@ -9,6 +9,9 @@ include install.sh
 include Fiji_imageJ_mcp.code-workspace
 recursive-include scripts *.py
 
+# Cursor plugin (copy to ~/.cursor/plugins/local/); not importable from Python
+graft extras/cursor-fiji-mcp-plugin
+
 recursive-include src/fiji_mcp *.py
 recursive-include src/fiji_mcp *.json
 include src/fiji_mcp/data/FIJI_MCP_SKILL.md

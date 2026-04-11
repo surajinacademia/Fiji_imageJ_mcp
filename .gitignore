@@ -1,3 +1,6 @@
+# Cursor local editor state (never commit; plugin source lives under extras/)
+.cursor/
+
 # Local environments
 .conda-fiji-mcp/
 .venv/

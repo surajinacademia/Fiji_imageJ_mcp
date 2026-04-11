@@ -19,6 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure .cursor is not tracked (local editor-only)
+        run: |
+          tracked="$(git ls-files .cursor || true)"
+          if [ -n "$tracked" ]; then
+            echo "::error::The .cursor/ directory must not be committed."
+            echo "$tracked"
+            exit 1
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

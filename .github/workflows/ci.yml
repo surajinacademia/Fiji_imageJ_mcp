@@ -21,6 +21,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Ensure .cursor is not tracked (local editor-only)
+        run: |
+          tracked="$(git ls-files .cursor || true)"
+          if [ -n "$tracked" ]; then
+            echo "::error::The .cursor/ directory must not be committed. Remove it from the index, keep it gitignored, and use extras/cursor-fiji-mcp-plugin/ for the Fiji Cursor bundle."
+            echo "$tracked"
+            exit 1
+          fi
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
