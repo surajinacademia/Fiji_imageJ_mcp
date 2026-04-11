@@ -151,7 +151,7 @@ This mirrors a napari-mcp-style smoke flow: `health_check`, open `demo_images/sa
 
 ## MCP tools (overview)
 
-The server exposes **17** tools grouped by role:
+The server exposes **19** tools grouped by role:
 
 ### Fiji lifecycle and macros
 
