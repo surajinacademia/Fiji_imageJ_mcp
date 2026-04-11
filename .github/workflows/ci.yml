@@ -23,9 +23,9 @@ jobs:
 
       - name: Ensure .cursor is not tracked (local editor-only)
         run: |
-          tracked="$(git ls-files .cursor || true)"
+          tracked="$(git ls-files | grep -E '^\.cursor(/|$)' || true)"
           if [ -n "$tracked" ]; then
-            echo "::error::The .cursor/ directory must not be committed. Remove it from the index, keep it gitignored, and use extras/cursor-fiji-mcp-plugin/ for the Fiji Cursor bundle."
+            echo "::error::The .cursor path must not be committed. Remove from the index, keep it gitignored, and use extras/cursor-fiji-mcp-plugin/ for the Fiji Cursor bundle."
             echo "$tracked"
             exit 1
           fi
@@ -51,3 +51,4 @@ jobs:
         run: |
           python -m pip install build
           python -m build
+          bash scripts/verify_sdist_contents.sh

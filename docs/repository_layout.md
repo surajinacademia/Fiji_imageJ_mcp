@@ -6,7 +6,7 @@ Top-level map for contributors and release tooling.
 |------|------|
 | [`src/fiji_mcp/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/src/fiji_mcp) | Installable package: MCP server, tools, Fiji bridge, bundled [`data/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/src/fiji_mcp/data) (macro templates, agent skill markdown). |
 | [`tests/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/tests) | Pytest suite; integration tests gated on `FIJI_PATH` / markers. |
-| [`scripts/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/scripts) | Maintainer utilities: bootstrap install, README demo assets, batch report, MCP+GUI smoke client. |
+| [`scripts/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/scripts) | Maintainer utilities: bootstrap install, README demo assets, batch report, MCP+GUI smoke client, **[`verify_sdist_contents.sh`](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/scripts/verify_sdist_contents.sh)** (post-`build` sdist layout check; also run from CI). |
 | [`docs/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs) | Docsify site source (quickstart, tools, configuration, architecture). |
 | [`docs/releases/`](releases/) | Per-version **release note** drafts for GitHub Releases. |
 | [`.github/workflows/`](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/.github/workflows) | CI and PyPI publish. |

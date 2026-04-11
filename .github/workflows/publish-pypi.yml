@@ -21,9 +21,9 @@ jobs:
 
       - name: Ensure .cursor is not tracked (local editor-only)
         run: |
-          tracked="$(git ls-files .cursor || true)"
+          tracked="$(git ls-files | grep -E '^\.cursor(/|$)' || true)"
           if [ -n "$tracked" ]; then
-            echo "::error::The .cursor/ directory must not be committed."
+            echo "::error::The .cursor path must not be committed."
             echo "$tracked"
             exit 1
           fi
@@ -37,7 +37,9 @@ jobs:
         run: python -m pip install --upgrade pip build
 
       - name: Build sdist and wheel
-        run: python -m build
+        run: |
+          python -m build
+          bash scripts/verify_sdist_contents.sh
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
