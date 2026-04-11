@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Regenerate README hero images: Fiji analysis examples on bundled demo_images.
+Regenerate README hero images: exactly three Fiji examples on bundled demo_images.
 
-Includes filtering / morphology (Gaussian, Find Edges) and a particle-counting pipeline
-(threshold, Analyze Particles with morphology measurements, Results table screenshot).
+1. **Image processing** — filtering (Gaussian blur).
+2. **Analysis** — threshold + Java ParticleAnalyzer; README **markdown** table from ``ResultsTable``.
+3. **Feature extraction (skeleton)** — binary mask, ImageJ **Skeletonize**, then Fiji
+   **Analyze Skeleton (2D/3D)** when available (branch/junction metrics); headless-safe
+   where possible.
 
-Writes JPEGs under demo_output/ (committed) for use in README.md and docs/README.md.
+Writes JPEGs under ``demo_output/`` and refreshes **markdown tables** in ``README.md``
+(between ``<!-- readme-demo-table:… -->`` markers) unless ``UPDATE_README_TABLES=0``.
 
 Requires:
   - FIJI_PATH: Fiji installation root
-  - FIJI_MODE=headless (recommended; active_image screenshots work without a display)
+  - FIJI_MODE=headless (recommended for MCP-style runs)
 
 Usage (repo root, env with pyimagej / fiji_mcp):
   export FIJI_PATH=/Applications/Fiji
@@ -20,12 +24,10 @@ Usage (repo root, env with pyimagej / fiji_mcp):
 from __future__ import annotations
 
 import base64
-import io
 import os
+import re
 import sys
 from pathlib import Path
-
-from PIL import Image, ImageDraw, ImageFont
 
 _REPO = Path(__file__).resolve().parents[1]
 _SRC = _REPO / "src"
@@ -54,7 +56,8 @@ while (nImages > 0) {
         pass
 
 
-def _example(repo: Path, stem: str, image_rel: str, macro: str, caption_macro: str) -> None:
+def _example_image_process(repo: Path, stem: str, image_rel: str, macro: str, label: str) -> None:
+    """Example 1: open → single processing macro → screenshots."""
     from fiji_mcp.tools.macro_runner import open_image, run_macro
     from fiji_mcp.tools.screenshot import screenshot_fiji
 
@@ -68,20 +71,24 @@ def _example(repo: Path, stem: str, image_rel: str, macro: str, caption_macro: s
 
     run_macro(macro)
     shot_out = screenshot_fiji(capture_mode="active_image")
-    _save_b64(repo / "demo_output" / f"{stem}_analysis.jpg", shot_out.image_base64)
+    _save_b64(repo / "demo_output" / f"{stem}_processed.jpg", shot_out.image_base64)
 
-    print(f"  {stem}: {image_rel} -> {caption_macro}")
+    print(f"  {stem}: {image_rel} -> {label}")
     _close_all()
 
 
-def _save_results_jpeg_from_java_rt(rt, out_path: Path, *, max_rows: int = 40) -> None:
-    """Rasterize a Java ``ResultsTable`` to JPEG (global Results singleton is not always updated)."""
+def _markdown_table_from_rt(
+    rt,
+    *,
+    max_rows: int = 4,
+    keep_column_headings: frozenset[str],
+) -> str:
+    """GitHub-flavored markdown: slim table (index + selected numeric columns)."""
     n_rows = int(rt.getCounter())
     if n_rows < 1:
-        raise RuntimeError("ResultsTable has no rows after particle analysis.")
+        return "_No Results rows._\n"
+
     n_cols = int(rt.getLastColumn()) + 1
-    if n_cols < 1:
-        raise RuntimeError("ResultsTable has no columns.")
 
     def _heading(col: int) -> str:
         if hasattr(rt, "getColumnHeading"):
@@ -89,49 +96,83 @@ def _save_results_jpeg_from_java_rt(rt, out_path: Path, *, max_rows: int = 40) -
         return str(rt.getHeading(col))
 
     headings = [_heading(c) for c in range(n_cols)]
-    lines: list[str] = ["\t".join(headings)]
+    col_indices = list(range(n_cols))
+    if keep_column_headings is not None:
+        picked: list[int] = []
+        for c in range(n_cols):
+            if headings[c].strip() in keep_column_headings:
+                picked.append(c)
+        if picked:
+            col_indices = picked
+            headings = [headings[c] for c in col_indices]
+
+    head_cells = ["#", *headings]
+    sep_cells = ["---:"] + ["---:" for _ in headings]
+    lines = [
+        "| " + " | ".join(head_cells) + " |",
+        "| " + " | ".join(sep_cells) + " |",
+    ]
     cap = min(n_rows, max_rows)
     for row in range(cap):
-        cells: list[str] = []
-        for col in range(n_cols):
+        row_cells: list[str] = [str(row + 1)]
+        for col in col_indices:
             try:
-                cells.append(str(rt.getValueAsDouble(col, row)))
+                v = float(rt.getValueAsDouble(col, row))
+                if abs(v - round(v)) < 1e-6 and abs(v) < 1e9:
+                    row_cells.append(str(int(round(v))))
+                else:
+                    row_cells.append(f"{v:.3f}".rstrip("0").rstrip("."))
             except Exception:
-                cells.append("")
-        lines.append("\t".join(cells))
+                row_cells.append("")
+        lines.append("| " + " | ".join(row_cells) + " |")
+    out = "\n".join(lines) + "\n"
     if n_rows > cap:
-        lines.append(f"... ({n_rows - cap} more rows omitted)")
+        out += f"\n*{n_rows - cap} more row(s) in the full Results table.*\n"
+    return out
 
-    font = ImageFont.load_default()
-    margin = 6
-    line_gap = 4
-    draw_probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    text_heights: list[int] = []
-    text_widths: list[int] = []
-    for line in lines:
-        bbox = draw_probe.textbbox((0, 0), line, font=font)
-        text_widths.append(bbox[2] - bbox[0])
-        text_heights.append(bbox[3] - bbox[1])
 
-    width = min(max(max(text_widths) + 2 * margin, 80), 4096)
-    line_h = max(text_heights) + line_gap
-    height = max(line_h * len(lines) + margin, 40)
+def _markdown_skeleton_slim(sr, *, max_trees: int = 4) -> str:
+    """Short markdown: tree id, branch count, junction count."""
+    n_all = int(sr.getNumOfTrees())
+    if n_all < 1:
+        return "_No skeleton trees._\n"
 
-    img = Image.new("RGB", (width, height), color=(255, 255, 255))
-    draw = ImageDraw.Draw(img)
-    y = margin
-    for line in lines:
-        draw.text((margin, y), line, fill=(0, 0, 0), font=font)
-        y += line_h
+    branches = sr.getBranches()
+    junctions = sr.getJunctions()
+    n_show = min(n_all, max_trees)
+    lines = [
+        "| Tree | # Branches | # Junctions |",
+        "| ---: | ---: | ---: |",
+    ]
+    for i in range(n_show):
+        b = int(branches[i]) if branches is not None else 0
+        j = int(junctions[i]) if junctions is not None else 0
+        lines.append(f"| {i + 1} | {b} | {j} |")
+    out = "\n".join(lines) + "\n"
+    if n_all > n_show:
+        out += f"\n*{n_all - n_show} more tree(s) omitted.*\n"
+    return out
 
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=92)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(buf.getvalue())
+
+def _patch_readme_table(repo: Path, key: str, inner_md: str) -> None:
+    """Replace content between ``readme-demo-table:key`` markers in ``README.md``."""
+    path = repo / "README.md"
+    text = path.read_text(encoding="utf-8")
+    start_tag = f"<!-- readme-demo-table:{key} -->"
+    end_tag = f"<!-- /readme-demo-table:{key} -->"
+    pat = re.compile(
+        re.escape(start_tag) + r"\s*\n.*?\n" + re.escape(end_tag),
+        re.DOTALL,
+    )
+    if not pat.search(text):
+        print(f"warning: README.md missing {start_tag} … {end_tag}", file=sys.stderr)
+        return
+    repl = start_tag + "\n" + inner_md.rstrip() + "\n" + end_tag
+    path.write_text(pat.sub(repl, text, count=1), encoding="utf-8")
 
 
 def _run_particle_analyzer_java() -> object:
-    """Headless-safe particle analysis: macro ``run('Analyze Particles...')`` opens a GUI; use Java API."""
+    """Headless-safe particle analysis (avoid macro ``Analyze Particles...`` dialog)."""
     import scyjava as sj
 
     from fiji_mcp.tools.macro_runner import run_macro
@@ -146,14 +187,8 @@ def _run_particle_analyzer_java() -> object:
     Measurements = sj.jimport("ij.measure.Measurements")
 
     opts = int(ParticleAnalyzer.SHOW_OVERLAY_OUTLINES)
-    meas = int(
-        Measurements.AREA
-        + Measurements.MEAN
-        + Measurements.STD_DEV
-        + Measurements.PERIMETER
-        + Measurements.CIRCULARITY
-        + Measurements.FERET
-    )
+    # README demo: keep the results table small (Area + circularity only).
+    meas = int(Measurements.AREA + Measurements.CIRCULARITY)
 
     def _analyze(min_size: float, table: object) -> bool:
         pa = ParticleAnalyzer(opts, meas, table, min_size, 1.0e30, 0.0, 1.0)
@@ -169,14 +204,14 @@ def _run_particle_analyzer_java() -> object:
         if not _analyze(1.0, rt):
             raise RuntimeError("ParticleAnalyzer retry after Invert failed.")
         if int(rt.getCounter()) < 1:
-            raise RuntimeError("No particles detected after threshold + invert; pick another demo_images file.")
+            raise RuntimeError("No particles detected; change demo_images or thresholds.")
 
     rt.show("Results")
     return rt
 
 
-def _example_particles_morphology(repo: Path, stem: str, image_rel: str) -> None:
-    """Threshold → Java ParticleAnalyzer (counts + morphology) → overlay + Results table."""
+def _example_analysis_particles(repo: Path, stem: str, image_rel: str) -> str:
+    """Example 2: threshold → ParticleAnalyzer → overlay + measurements (markdown + optional JPEG)."""
     from fiji_mcp.tools.macro_runner import open_image, run_macro
     from fiji_mcp.tools.screenshot import screenshot_fiji
 
@@ -207,10 +242,153 @@ setBatchMode(false);
     shot_overlay = screenshot_fiji(capture_mode="active_image")
     _save_b64(repo / "demo_output" / f"{stem}_overlay.jpg", shot_overlay.image_base64)
 
-    _save_results_jpeg_from_java_rt(rt, repo / "demo_output" / f"{stem}_results.jpg")
+    particles_md = _markdown_table_from_rt(
+        rt,
+        max_rows=4,
+        keep_column_headings=frozenset({"Area", "Circ."}),
+    )
 
-    print(f"  {stem}: {image_rel} -> particle count + morphology (Java ParticleAnalyzer)")
+    print(f"  {stem}: {image_rel} -> particle analysis (Area, Circ.)")
     _close_all()
+    return particles_md
+
+
+def _skeleton_result_to_results_table(sr) -> object:
+    """Build an ImageJ ``ResultsTable`` from ``SkeletonResult`` (headless-safe)."""
+    import scyjava as sj
+
+    ResultsTable = sj.jimport("ij.measure.ResultsTable")
+    rt = ResultsTable()
+    n = int(sr.getNumOfTrees())
+    if n < 1:
+        return rt
+
+    def _jcall(name: str):
+        m = getattr(sr, name, None)
+        if m is None:
+            return None
+        return m()
+
+    try:
+        sr.calculateNumberOfVoxels()
+    except Exception:
+        pass
+
+    branches = _jcall("getBranches")
+    junctions = _jcall("getJunctions")
+    end_pts = _jcall("getEndPoints")
+    junction_vox = _jcall("getJunctionVoxels")
+    slabs = _jcall("getSlabs")
+    triples = _jcall("getTriples")
+    quadruples = _jcall("getQuadruples")
+    n_vox = _jcall("getNumberOfVoxels")
+    avg_br = _jcall("getAverageBranchLength")
+    max_br = _jcall("getMaximumBranchLength")
+
+    def _cell(arr, row: int) -> float:
+        if arr is None:
+            return float("nan")
+        try:
+            return float(arr[row])
+        except Exception:
+            return float("nan")
+
+    for i in range(n):
+        rt.incrementCounter()
+        rt.addValue("Skeleton", float(i + 1))
+        rt.addValue("# Branches", _cell(branches, i))
+        rt.addValue("# Junctions", _cell(junctions, i))
+        rt.addValue("# End-point voxels", _cell(end_pts, i))
+        rt.addValue("# Junction voxels", _cell(junction_vox, i))
+        rt.addValue("# Slab voxels", _cell(slabs, i))
+        rt.addValue("# Triple points", _cell(triples, i))
+        rt.addValue("# Quadruple points", _cell(quadruples, i))
+        rt.addValue("# Tree voxels", _cell(n_vox, i))
+        rt.addValue("Avg branch length", _cell(avg_br, i))
+        rt.addValue("Max branch length", _cell(max_br, i))
+
+    return rt
+
+
+def _run_analyze_skeleton_java(imp) -> object | None:
+    """Fiji **Analyze Skeleton (2D/3D)** via Java API (macro path often leaves Results empty in headless)."""
+    import scyjava as sj
+
+    try:
+        AnalyzeSkeleton_ = sj.jimport("sc.fiji.analyzeSkeleton.AnalyzeSkeleton_")
+    except Exception:
+        return None
+
+    plug = AnalyzeSkeleton_()
+    plug.setup("", imp)
+    none = int(AnalyzeSkeleton_.NONE)
+    # Pass ``imp`` as ``origIP`` (not Java ``null``): JPype overload resolution treats ``None`` as ambiguous
+    # between ``run(int, boolean, boolean, ImagePlus, …)`` and ``run(int, double, boolean, ImagePlus, …)``.
+    return plug.run(none, False, False, imp, True, False)
+
+
+def _example_skeleton(repo: Path, stem: str, image_rel: str) -> str:
+    """Example 3: binary + Skeletonize; Analyze Skeleton (2D/3D) metrics via Java API."""
+    from fiji_mcp.tools.macro_runner import open_image, run_macro
+    from fiji_mcp.tools.screenshot import screenshot_fiji
+
+    img_path = (repo / image_rel).resolve()
+    if not img_path.is_file():
+        raise SystemExit(f"Missing demo image: {img_path}")
+
+    open_image(str(img_path))
+    shot_in = screenshot_fiji(capture_mode="active_image")
+    _save_b64(repo / "demo_output" / f"{stem}_input.jpg", shot_in.image_base64)
+
+    run_macro(
+        """
+setBatchMode(true);
+run("8-bit");
+run("Gaussian Blur...", "sigma=1");
+setOption("BlackBackground", true);
+setAutoThreshold("Otsu dark");
+run("Convert to Mask");
+run("Fill Holes");
+run("Skeletonize");
+setBatchMode(false);
+"""
+    )
+
+    shot_skel = screenshot_fiji(capture_mode="active_image")
+    _save_b64(repo / "demo_output" / f"{stem}_skeleton.jpg", shot_skel.image_base64)
+
+    import scyjava as sj
+
+    IJ = sj.jimport("ij.IJ")
+    imp = IJ.getImage()
+    if imp is None:
+        print(f"  {stem}: {image_rel} -> skeleton only (no active ImagePlus for Analyze Skeleton)")
+        _close_all()
+        return "_Skeleton image saved; Analyze Skeleton skipped (no image)._"
+
+    sr = _run_analyze_skeleton_java(imp)
+    if sr is None:
+        print(f"  {stem}: {image_rel} -> skeleton only (sc.fiji.analyzeSkeleton not on classpath)")
+        _close_all()
+        return "_Analyze Skeleton plugin not available on this classpath._"
+
+    n_trees = int(sr.getNumOfTrees())
+    if n_trees < 1:
+        print(f"  {stem}: {image_rel} -> skeleton (Analyze Skeleton: zero trees)")
+        _close_all()
+        return "_No skeleton trees detected._"
+
+    sk_md = _markdown_skeleton_slim(sr, max_trees=4)
+
+    rt = _skeleton_result_to_results_table(sr)
+    if int(rt.getCounter()) < 1:
+        print(f"  {stem}: {image_rel} -> skeleton (Analyze Skeleton: empty metrics table)")
+        _close_all()
+        return sk_md
+
+    print(f"  {stem}: {image_rel} -> skeleton + Analyze Skeleton (2D/3D) feature table ({n_trees} tree(s))")
+    _close_all()
+    return sk_md
 
 
 def main() -> int:
@@ -227,30 +405,39 @@ def main() -> int:
         print(f"health_check failed: {h}", file=sys.stderr)
         return 1
 
-    # Distinct demo_images + different ImageJ pipelines
-    _example(
+    # 1) Image processing
+    _example_image_process(
         _REPO,
         "readme_ex01_img07",
         "demo_images/img07.png",
         'run("Gaussian Blur...", "sigma=4");',
         "Gaussian blur σ=4",
     )
-    _example(
+    # 2) Quantitative analysis (particles)
+    particles_md = _example_analysis_particles(
         _REPO,
-        "readme_ex02_img04",
-        "demo_images/img04.png",
-        'run("Find Edges");',
-        "Find Edges",
-    )
-    _example_particles_morphology(
-        _REPO,
-        "readme_ex03_img10",
+        "readme_ex02_img10",
         "demo_images/img10.png",
     )
+    # 3) Skeleton-based features (built-in Skeletonize + optional Analyze Skeleton plugin)
+    skeleton_md = _example_skeleton(
+        _REPO,
+        "readme_ex03_img12",
+        "demo_images/img12.png",
+    )
 
-    print("Wrote demo_output/readme_ex01_img07_{input,analysis}.jpg")
-    print("Wrote demo_output/readme_ex02_img04_{input,analysis}.jpg")
-    print("Wrote demo_output/readme_ex03_img10_{input,overlay,results}.jpg")
+    if os.environ.get("UPDATE_README_TABLES", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    ):
+        _patch_readme_table(_REPO, "ex2-particles", particles_md)
+        _patch_readme_table(_REPO, "ex3-skeleton", skeleton_md)
+        print("Patched README.md tables (readme-demo-table markers). Set UPDATE_README_TABLES=0 to skip.")
+
+    print("Wrote demo_output/readme_ex01_img07_{input,processed}.jpg")
+    print("Wrote demo_output/readme_ex02_img10_{input,overlay}.jpg")
+    print("Wrote demo_output/readme_ex03_img12_{input,skeleton}.jpg")
     return 0
 
 

@@ -17,7 +17,17 @@ For IDE / CLI MCP, default **`FIJI_MODE=headless`** is enough (no desktop for `a
 
 ---
 
-## 2. Install (easiest: one script)
+## 2. Install
+
+### From PyPI (recommended for users)
+
+```bash
+pip install fiji-mcp-server
+```
+
+Continue to **§3** to configure Cursor / Claude / etc. (`fiji-mcp-install install … --fiji-path …`).
+
+### From a git clone (developers)
 
 **Clone once**, then run the installer from the repo root. It creates **`.venv`**, upgrades **pip / setuptools / wheel**, and runs **`pip install -e .`**, which pulls **every runtime dependency** from `pyproject.toml` (you do not need to list packages yourself).
 
@@ -114,6 +124,49 @@ python scripts/demo_fiji_mcp_session.py
 ```
 
 First JVM start is often **30–90 seconds**; later calls are faster.
+
+### Plug-and-play: `scripts/mcp_and_gui_fiji.py`
+
+<a id="mcp-and-gui-fiji"></a>
+
+One command exercises **the real MCP stdio path** (FastMCP `Client` → `python -m fiji_mcp` → `call_tool`), not in-process imports of `fiji_mcp.tools.*`.
+
+From the **repo root**, with the same venv you use for MCP:
+
+```bash
+source .venv/bin/activate   # if needed
+python scripts/mcp_and_gui_fiji.py
+```
+
+**What it does by default**
+
+- If **`FIJI_PATH`** is unset, it imports `fiji_mcp` and uses the same **auto-detection** as the server (`fiji_mcp.fiji_bridge.detect_fiji_path`), sets `FIJI_PATH` for the child MCP process, and prints the chosen path.
+- If you **omit the image**, it prefers `demo_output/readme_ex03_img00_input.jpg`, then `demo_images/sample_gradient.pgm`, then another raster under `demo_images/`.
+- Runs the **MCP monitor** (default **4** ticks, **5** s apart): writes `tick_*.json` and `tick_*.jpg` under `demo_output/mcp_live/`.
+- On **macOS**, opens **Fiji.app** with the same file **after** MCP finishes (two separate Fiji instances).
+
+**Useful flags** (default parser — omit these for the full combo on macOS):
+
+| Flag | Meaning |
+| ---- | ------- |
+| `--mcp-only` | No Fiji.app |
+| `--gui-only` | Only Fiji.app (no MCP; macOS) |
+| `--no-gui` / `--no-mcp` | Turn off half of the default combo |
+| `--gui-first` | Fiji.app before MCP |
+| `--iterations`, `--interval`, `--out-dir` | Monitor tuning (defaults: 4 ticks, 5 s, `demo_output/mcp_live/`) |
+
+**Auto-detect when `FIJI_PATH` is unset:** the script must be able to **`import fiji_mcp`** (e.g. `pip install -e .` from this repo, or `python scripts/install_fiji_mcp.py` so `.venv` has the editable install).
+
+**Examples**
+
+```bash
+python scripts/mcp_and_gui_fiji.py
+python scripts/mcp_and_gui_fiji.py ./my_sample.tif
+python scripts/mcp_and_gui_fiji.py --mcp-only --iterations 2 --interval 1
+unset FIJI_PATH && python scripts/mcp_and_gui_fiji.py --mcp-only --iterations 1
+```
+
+**Legacy (unchanged):** if the **first** argument is `mcp-monitor`, `open-gui`, or `both`, the old subcommand API is used, e.g. `python scripts/mcp_and_gui_fiji.py mcp-monitor --image demo_images/sample_gradient.pgm`. See `python scripts/mcp_and_gui_fiji.py --help` in each mode.
 
 ---
 

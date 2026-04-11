@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,11 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class HealthCheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ok: Literal[True] = Field(default=True, description="Bridge responded successfully.")
+    ok: Literal[True] = Field(
+        default=True, description="Bridge responded successfully."
+    )
     initialized: bool = Field(description="PyImageJ context is ready.")
-    fiji_path: str | None = Field(description="Resolved Fiji installation path, if known.")
+    fiji_path: str | None = Field(
+        description="Resolved Fiji installation path, if known."
+    )
     mode: str = Field(description="Runtime mode, e.g. interactive or headless.")
-    imagej_version: str = Field(description="ImageJ/Fiji version string from the Java side.")
+    imagej_version: str = Field(
+        description="ImageJ/Fiji version string from the Java side."
+    )
     operation_timeout_seconds: float = Field(
         description="Per-operation timeout from FIJI_OPERATION_TIMEOUT_SECONDS."
     )
@@ -23,8 +29,12 @@ class HealthCheckResult(BaseModel):
 class MacroRunResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ok: Literal[True] = Field(default=True, description="Macro finished without raising on the Java side.")
-    result: str = Field(description="String return value from ImageJ1.runMacro, often empty.")
+    ok: Literal[True] = Field(
+        default=True, description="Macro finished without raising on the Java side."
+    )
+    result: str = Field(
+        description="String return value from ImageJ1.runMacro, often empty."
+    )
     log_tail: str = Field(
         description="Tail of the ImageJ log window (last ~4000 chars), useful for debugging."
     )
@@ -33,7 +43,9 @@ class MacroRunResult(BaseModel):
 class OpenImageResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ok: Literal[True] = Field(default=True, description="Image opened and shown in Fiji.")
+    ok: Literal[True] = Field(
+        default=True, description="Image opened and shown in Fiji."
+    )
     title: str = Field(description="Window title of the opened image.")
     width: int = Field(ge=0)
     height: int = Field(ge=0)
@@ -46,7 +58,9 @@ class SaveImageResult(BaseModel):
     ok: Literal[True] = Field(default=True, description="Image written to disk.")
     path: str = Field(description="Output file path.")
     title: str = Field(description="Title of the image that was saved.")
-    format: str = Field(description="Format hint passed to ImageJ saveAs (e.g. tiff, png).")
+    format: str = Field(
+        description="Format hint passed to ImageJ saveAs (e.g. tiff, png)."
+    )
 
 
 class BatchMacroStepSuccess(BaseModel):
@@ -70,7 +84,10 @@ class RunBatchMacrosResult(BaseModel):
 
     ok: bool = Field(description="True only if every step succeeded.")
     total_steps: int = Field(ge=0, description="Number of macros requested.")
-    completed_steps: int = Field(ge=0, description="Steps attempted before stop (may be less than total if stopped early).")
+    completed_steps: int = Field(
+        ge=0,
+        description="Steps attempted before stop (may be less than total if stopped early).",
+    )
     failed_steps: int = Field(ge=0, description="Count of steps with ok=false.")
     results: list[BatchMacroStepSuccess | BatchMacroStepFailure] = Field(
         description="Per-step outcomes in order.",
@@ -91,7 +108,9 @@ class ListAllCommandsResult(BaseModel):
 
     ok: Literal[True] = Field(default=True)
     total: int = Field(ge=0, description="Total commands discovered.")
-    returned: int = Field(ge=0, description="Number of commands in this response (capped by limit).")
+    returned: int = Field(
+        ge=0, description="Number of commands in this response (capped by limit)."
+    )
     commands: list[CommandEntry] = Field(description="Slice of commands up to limit.")
 
 
@@ -118,9 +137,15 @@ class DescribePluginResult(BaseModel):
 
     ok: Literal[True] = Field(default=True)
     command: CommandEntry = Field(description="Matched command record.")
-    inputs: list[PluginInputMeta] = Field(description="Declared inputs when CommandService exposes them.")
-    inputs_available: bool = Field(description="True if any input metadata was returned.")
-    note: str = Field(description="Guidance when metadata is incomplete (legacy plugins).")
+    inputs: list[PluginInputMeta] = Field(
+        description="Declared inputs when CommandService exposes them."
+    )
+    inputs_available: bool = Field(
+        description="True if any input metadata was returned."
+    )
+    note: str = Field(
+        description="Guidance when metadata is incomplete (legacy plugins)."
+    )
 
 
 class ExtensionEntry(BaseModel):
@@ -136,7 +161,9 @@ class ListExtensionsResult(BaseModel):
     ok: Literal[True] = Field(default=True)
     extensions: list[ExtensionEntry]
     count: int = Field(ge=0)
-    note: str = Field(description="How extension list was obtained or why it may be empty.")
+    note: str = Field(
+        description="How extension list was obtained or why it may be empty."
+    )
 
 
 class OpenImageSummary(BaseModel):
@@ -188,8 +215,12 @@ class ScreenshotResult(BaseModel):
     format: str = Field(description="Encoder output format label.")
     width: int = Field(ge=1)
     height: int = Field(ge=1)
-    from_cache: bool = Field(description="True if a recent identical capture was reused.")
-    image_base64: str = Field(description="Base64-encoded image bytes for inline display.")
+    from_cache: bool = Field(
+        description="True if a recent identical capture was reused."
+    )
+    image_base64: str = Field(
+        description="Base64-encoded image bytes for inline display."
+    )
 
 
 class WorkflowStepInput(BaseModel):
@@ -204,8 +235,11 @@ class WorkflowStepInput(BaseModel):
         description="When verify_each_step is true, capture screenshot after macro unless false.",
     )
     screenshot_capture: Literal["full_screen", "active_image", "results_table"] = Field(
-        default="full_screen",
-        description="Passed to screenshot_fiji when verifying this step (non-full_screen modes avoid desktop capture).",
+        default="active_image",
+        description=(
+            "Passed to screenshot_fiji when verifying this step. Default ``active_image`` works in headless mode; "
+            "use ``full_screen`` only with FIJI_MODE=gui and a display."
+        ),
     )
 
 
@@ -233,9 +267,15 @@ class RunWorkflowResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ok: bool = Field(description="True if every step succeeded.")
-    results: list[WorkflowStepSuccess | WorkflowStepFailure] = Field(default_factory=list)
-    total_steps: int | None = Field(default=None, description="Set on full completion summary.")
-    failed_steps: int | None = Field(default=None, description="Count of failed steps on full summary.")
+    results: list[WorkflowStepSuccess | WorkflowStepFailure] = Field(
+        default_factory=list
+    )
+    total_steps: int | None = Field(
+        default=None, description="Set on full completion summary."
+    )
+    failed_steps: int | None = Field(
+        default=None, description="Count of failed steps on full summary."
+    )
     completed_steps: int | None = Field(
         default=None,
         description="On early abort, number of fully completed steps before the failure.",
@@ -244,3 +284,93 @@ class RunWorkflowResult(BaseModel):
         default=None,
         description="On early abort, 1-based index of the first hard failure.",
     )
+
+
+class SessionEventEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    seq: int = Field(
+        ge=1, description="Monotonic event index within the server process."
+    )
+    tool: str = Field(description="MCP tool name.")
+    summary: str = Field(description="One-line human-readable summary.")
+    detail: dict[str, Any] = Field(
+        default_factory=dict, description="Small structured fields only."
+    )
+
+
+class GetSessionTraceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    returned_events: int = Field(ge=0)
+    events: list[SessionEventEntry] = Field(default_factory=list)
+    open_images: ListOpenImagesResult | None = Field(
+        default=None,
+        description="Snapshot of open windows when include_open_images was true.",
+    )
+    note: str = Field(
+        default="", description="Non-fatal issues (e.g. open-image snapshot failed)."
+    )
+
+
+class ClearSessionTraceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    cleared: int = Field(ge=0, description="Number of trace rows removed.")
+
+
+class MacroTemplateEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    category: str
+    description: str
+    macro: str
+
+
+class ListMacroTemplatesResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    count: int = Field(ge=0)
+    templates: list[MacroTemplateEntry] = Field(default_factory=list)
+
+
+class GetMacroTemplateResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    template: MacroTemplateEntry
+
+
+class ParseMacroOutputResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    format_detected: str
+    parsed_json: Any | None = None
+    values: dict[str, Any] = Field(default_factory=dict)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    numbers: list[float] = Field(default_factory=list)
+
+
+class CompareScreenshotsResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = Field(default=True)
+    mime_type: str
+    format: str
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+    image_base64: str
+    mean_abs_error: float
+    rmse: float
+    width_before: int = Field(ge=1)
+    height_before: int = Field(ge=1)
+    width_after: int = Field(ge=1)
+    height_after: int = Field(ge=1)
+    compare_width: int = Field(ge=1)
+    compare_height: int = Field(ge=1)

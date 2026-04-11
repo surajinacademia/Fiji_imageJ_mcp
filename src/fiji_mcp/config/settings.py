@@ -47,7 +47,9 @@ def _parse_int(name: str, default: int) -> int:
 def _parse_int_bounded(name: str, default: int, *, lo: int, hi: int) -> int:
     value = _parse_int(name, default)
     if not lo <= value <= hi:
-        raise ValueError(f"Environment variable {name} must be between {lo} and {hi} (got {value})")
+        raise ValueError(
+            f"Environment variable {name} must be between {lo} and {hi} (got {value})"
+        )
     return value
 
 
@@ -64,7 +66,9 @@ def _parse_float(name: str, default: float) -> float:
 def _parse_float_bounded(name: str, default: float, *, lo: float, hi: float) -> float:
     value = _parse_float(name, default)
     if not lo <= value <= hi:
-        raise ValueError(f"Environment variable {name} must be between {lo} and {hi} (got {value})")
+        raise ValueError(
+            f"Environment variable {name} must be between {lo} and {hi} (got {value})"
+        )
     return value
 
 
@@ -103,11 +107,21 @@ def load_settings() -> Settings:
         operation_timeout_seconds=_parse_float_bounded(
             "FIJI_OPERATION_TIMEOUT_SECONDS", 60.0, lo=1.0, hi=86400.0
         ),
-        screenshot_max_dim=_parse_int_bounded("FIJI_SCREENSHOT_MAX_DIM", 1920, lo=64, hi=8192),
-        screenshot_quality=_parse_int_bounded("FIJI_SCREENSHOT_QUALITY", 85, lo=1, hi=100),
-        screenshot_cache_size=_parse_int_bounded("FIJI_SCREENSHOT_CACHE_SIZE", 5, lo=1, hi=500),
-        gc_every_n_operations=_parse_int_bounded("FIJI_GC_EVERY_N_OPERATIONS", 10, lo=1, hi=10_000),
+        screenshot_max_dim=_parse_int_bounded(
+            "FIJI_SCREENSHOT_MAX_DIM", 1920, lo=64, hi=8192
+        ),
+        screenshot_quality=_parse_int_bounded(
+            "FIJI_SCREENSHOT_QUALITY", 85, lo=1, hi=100
+        ),
+        screenshot_cache_size=_parse_int_bounded(
+            "FIJI_SCREENSHOT_CACHE_SIZE", 5, lo=1, hi=500
+        ),
+        gc_every_n_operations=_parse_int_bounded(
+            "FIJI_GC_EVERY_N_OPERATIONS", 10, lo=1, hi=10_000
+        ),
         test_image_path=os.environ.get("FIJI_TEST_IMAGE"),
-        max_macro_chars=_parse_int_bounded("FIJI_MAX_MACRO_CHARS", 500_000, lo=4096, hi=10_000_000),
+        max_macro_chars=_parse_int_bounded(
+            "FIJI_MAX_MACRO_CHARS", 500_000, lo=4096, hi=10_000_000
+        ),
         data_roots=_parse_data_roots(),
     )

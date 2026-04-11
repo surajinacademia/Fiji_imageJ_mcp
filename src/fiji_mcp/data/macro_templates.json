@@ -1,0 +1,74 @@
+{
+  "templates": [
+    {
+      "id": "gaussian_blur",
+      "title": "Gaussian Blur",
+      "category": "filters",
+      "description": "Blur the current image; sigma in pixels.",
+      "macro": "run(\"Gaussian Blur...\", \"sigma=2\");"
+    },
+    {
+      "id": "median",
+      "title": "Median...",
+      "category": "filters",
+      "description": "Radius in pixels.",
+      "macro": "run(\"Median...\", \"radius=2\");"
+    },
+    {
+      "id": "subtract_background",
+      "title": "Subtract Background...",
+      "category": "process",
+      "description": "Rolling ball background subtraction.",
+      "macro": "run(\"Subtract Background...\", \"rolling=50 sliding\");"
+    },
+    {
+      "id": "auto_threshold",
+      "title": "Auto Threshold",
+      "category": "segment",
+      "description": "Global auto threshold (method name varies by ImageJ version).",
+      "macro": "setAutoThreshold(\"Default dark\"); run(\"Convert to Mask\");"
+    },
+    {
+      "id": "analyze_particles",
+      "title": "Analyze Particles...",
+      "category": "analyze",
+      "description": "Measure/count particles on binary mask.",
+      "macro": "run(\"Analyze Particles...\", \"size=50-Infinity circularity=0.00-1.00 show=Outlines display summarize\");"
+    },
+    {
+      "id": "measure",
+      "title": "Measure",
+      "category": "analyze",
+      "description": "Record measurements for ROI or entire image to Results.",
+      "macro": "run(\"Measure\");"
+    },
+    {
+      "id": "clear_results",
+      "title": "Clear Results",
+      "category": "analyze",
+      "description": "Empty the Results table.",
+      "macro": "run(\"Clear Results\");"
+    },
+    {
+      "id": "rgb_color",
+      "title": "RGB Color",
+      "category": "image",
+      "description": "Convert composite/multichannel display to RGB stack.",
+      "macro": "run(\"RGB Color\");"
+    },
+    {
+      "id": "set_scale_bar",
+      "title": "Scale Bar...",
+      "category": "annotate",
+      "description": "Add a scale bar overlay (adjust width_in_cm / font).",
+      "macro": "run(\"Scale Bar...\", \"width=5 height=4 font=18 color=White background=None location=[Lower Right] bold\");"
+    },
+    {
+      "id": "watershed",
+      "title": "Watershed",
+      "category": "segment",
+      "description": "Separate touching particles on binary mask.",
+      "macro": "run(\"Watershed\");"
+    }
+  ]
+}

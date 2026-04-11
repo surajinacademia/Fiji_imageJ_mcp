@@ -1,27 +1,29 @@
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm>=8.0", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fiji-mcp-server"
-version = "0.1.0"
-description = "MCP server for Fiji/ImageJ plugin discovery and execution"
+version = "0.1.1"
+description = "Model Context Protocol (MCP) server for Fiji/ImageJ: macros, discovery, screenshots, and workflows via PyImageJ"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "BSD-3-Clause" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [{ name = "Suraj Sahu", email = "ssahu2@ucmerced.edu" }]
 maintainers = [{ name = "Suraj Sahu", email = "ssahu2@ucmerced.edu" }]
 keywords = ["fiji", "imagej", "mcp", "pyimagej", "microscopy"]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
     "fastmcp>=2.10.3",
@@ -35,6 +37,7 @@ dependencies = [
 Homepage = "https://github.com/surajinacademia/Fiji_imageJ_mcp"
 Repository = "https://github.com/surajinacademia/Fiji_imageJ_mcp"
 Documentation = "https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs"
+Changelog = "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/surajinacademia/Fiji_imageJ_mcp/issues"
 
 [project.optional-dependencies]
@@ -52,7 +55,11 @@ dev = [
     "pre-commit>=4.3.0",
     "bandit>=1.8.6",
 ]
-all = ["fiji-mcp-server[test,dev]"]
+publish = [
+    "build>=1.2.0",
+    "twine>=5.0.0",
+]
+all = ["fiji-mcp-server[test,dev,publish]"]
 
 [project.scripts]
 fiji-mcp-server = "fiji_mcp.__main__:main"
@@ -62,14 +69,7 @@ fiji-mcp-install = "fiji_mcp.cli.install:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-fiji_mcp = ["data/macro_templates.json"]
-
-[tool.setuptools_scm]
-write_to = "src/fiji_mcp/_version.py"
-fallback_version = "0.1.0"
-version_scheme = "guess-next-dev"
-local_scheme = "node-and-date"
-tag_regex = "^(?P<prefix>v)?(?P<version>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$"
+fiji_mcp = ["data/macro_templates.json", "py.typed"]
 
 [tool.pytest.ini_options]
 addopts = [
@@ -88,6 +88,7 @@ markers = [
     "integration: integration tests requiring local Fiji runtime",
     "unit: marks unit tests",
     "smoke: marks smoke tests for quick validation",
+    "mcp_stdio: subprocess MCP client over stdio (FastMCP Client)",
 ]
 
 [tool.ruff]
@@ -111,7 +112,6 @@ exclude = [
     "venv",
     "*vendored*",
     "*_vendor*",
-    "*_version.py",
 ]
 fix = false
 

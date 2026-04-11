@@ -1,14 +1,31 @@
+# PyPI-friendly sdist: ship the Python package, installer scripts, and metadata only.
 include LICENSE
 include README.md
 include CHANGELOG.md
 include RELEASE_NOTES_v0.1.0.md
+include RELEASE_NOTES_v0.1.1.md
+include RELEASING.md
 include CLAUDE.md
 include pyproject.toml
 include install.sh
+include Fiji_imageJ_mcp.code-workspace
 recursive-include scripts *.py
 
 recursive-include src/fiji_mcp *.py
 recursive-include src/fiji_mcp *.json
+include src/fiji_mcp/py.typed
+
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 recursive-exclude tests *
+
+# Repo-only trees (not needed to install or import fiji_mcp from PyPI)
+prune .cursor
+prune .github
+prune demo_images
+prune demo_output
+prune docs
+prune .conda-fiji-mcp
+prune .venv
+prune venv
+exclude plan.md

@@ -58,6 +58,7 @@ An example file lives at [`.mcp.json`](../.mcp.json) in the repository (edit `FI
 | `FIJI_DATA_ROOTS` | Allowlist for `open_image` / `save_image` | Empty = unrestricted |
 | `FIJI_MCP_PYTHON` | Python to spawn MCP in batch scripts | Defaults to driver `sys.executable` |
 | `FIJI_LOG_LEVEL` | Python log level (stderr only) | `WARNING` |
+| `FIJI_PATH_CANDIDATES` | Extra Fiji roots to scan when `FIJI_PATH` is unset (`os.pathsep`-separated paths) | Optional; see `fiji_mcp.fiji_bridge._candidate_fiji_paths` |
 
 Invalid numeric env values → **exit code 2** at startup (`python -m fiji_mcp` / `fiji-mcp-server`).
 
@@ -70,6 +71,15 @@ Invalid numeric env values → **exit code 2** at startup (`python -m fiji_mcp` 
 - `FIJI_MAX_MACRO_CHARS` — macro size cap, default `500000`
 - `FIJI_TEST_IMAGE` — integration test image path
 - `FIJI_INTERACTIVE_FORCE` — `1` on macOS + `gui` if PyImageJ needs `interactive:force`
+- `FIJI_MCP_CLIENT_TOOL_TIMEOUT` — seconds for each MCP `call_tool` in **client** scripts (`scripts/mcp_and_gui_fiji.py`, `scripts/generate_image_analysis_report.py`); default `300` / `900` respectively if unset
+
+## Terminal plug-and-play (`mcp_and_gui_fiji.py`)
+
+The MCP host (Cursor, etc.) still needs **`FIJI_PATH`** in merged JSON unless you rely on auto-detect inside the server process. For **local terminal** runs, `scripts/mcp_and_gui_fiji.py` can start **without** `FIJI_PATH` when `fiji_mcp` is importable (`pip install -e .` from the repo): it calls the same **`detect_fiji_path(load_settings())`** logic as the server (see `fiji_mcp/fiji_bridge.py` — standard OS install locations plus **`FIJI_PATH_CANDIDATES`**). If nothing matches, set **`FIJI_PATH`** to your Fiji **root** (folder containing `jars/`; on macOS often `/Applications/Fiji` with `Fiji.app` inside).
+
+The script’s spawned child server gets `PYTHONPATH=<repo>/src`, **`PYTHONUNBUFFERED=1`**, and **`FIJI_MODE=headless`** by default unless the parent environment already sets `FIJI_MODE`.
+
+See [Quick start — Plug-and-play](quickstart.md) for usage (`python scripts/mcp_and_gui_fiji.py`, flags, legacy subcommands).
 
 ## Production notes
 

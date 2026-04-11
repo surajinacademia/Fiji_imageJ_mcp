@@ -17,3 +17,11 @@ build/
 
 # OS
 .DS_Store
+
+# Batch report + large generated docs (created by scripts/generate_image_analysis_report.py)
+research_output/
+docs/fiji_mcp_comprehensive_image_analysis_report.md
+
+# Transient MCP monitor output (scripts/mcp_and_gui_fiji.py)
+demo_output/mcp_live/
+demo_output/mcp_live_test/

@@ -15,6 +15,7 @@ from fiji_mcp.mcp_instance import mcp
 from fiji_mcp.schemas.tool_outputs import ScreenshotResult
 from fiji_mcp.utils.error_handler import FijiToolError, run_with_timeout
 from fiji_mcp.utils.optimizer import encode_screenshot
+from fiji_mcp.utils.session_state import log_tool_event
 
 _ANN_READ = ToolAnnotations(readOnlyHint=True, idempotentHint=False)
 
@@ -148,7 +149,10 @@ def _results_table_to_pil() -> Image.Image:
     if n_rows > cap:
         lines.append(f"... ({n_rows - cap} more rows omitted)")
 
-    lines = [ln[:_MAX_LINE_CHARS] + ("..." if len(ln) > _MAX_LINE_CHARS else "") for ln in lines]
+    lines = [
+        ln[:_MAX_LINE_CHARS] + ("..." if len(ln) > _MAX_LINE_CHARS else "")
+        for ln in lines
+    ]
 
     font = ImageFont.load_default()
     margin = 6
@@ -174,14 +178,6 @@ def _results_table_to_pil() -> Image.Image:
     return img
 
 
-@mcp.tool(
-    annotations=_ANN_READ,
-    description=(
-        "Capture pixels for verification: full_screen (primary monitor via Robot), "
-        "active_image (current ImagePlus), or results_table (render Measure/Results data). "
-        "Use active_image or results_table when running headless without a display."
-    ),
-)
 def screenshot_fiji(
     capture_mode: CaptureMode = "full_screen",
 ) -> ScreenshotResult:
@@ -212,4 +208,20 @@ def screenshot_fiji(
             image_base64=encoded.base64_data,
         )
 
-    return run_with_timeout(_capture)
+    result = run_with_timeout(_capture)
+    log_tool_event(
+        "screenshot_fiji",
+        f"{result.capture_mode} {result.width}x{result.height}",
+        {"from_cache": result.from_cache},
+    )
+    return result
+
+
+mcp.tool(
+    annotations=_ANN_READ,
+    description=(
+        "Capture pixels for verification: full_screen (primary monitor via Robot), "
+        "active_image (current ImagePlus), or results_table (render Measure/Results data). "
+        "Use active_image or results_table when running headless without a display."
+    ),
+)(screenshot_fiji)

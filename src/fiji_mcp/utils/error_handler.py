@@ -21,7 +21,11 @@ def run_with_timeout(func: Callable[[], T], timeout_seconds: float | None = None
 
     ``timeout_seconds`` is accepted for API compatibility but cannot interrupt blocked Java calls.
     """
-    _ = timeout_seconds if timeout_seconds is not None else load_settings().operation_timeout_seconds
+    _ = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else load_settings().operation_timeout_seconds
+    )
     try:
         return func()
     except Exception as error:  # noqa: BLE001
@@ -31,7 +35,9 @@ def run_with_timeout(func: Callable[[], T], timeout_seconds: float | None = None
         raise
 
 
-def with_retries(func: Callable[[], T], retries: int = 2, base_delay: float = 0.25) -> T:
+def with_retries(
+    func: Callable[[], T], retries: int = 2, base_delay: float = 0.25
+) -> T:
     """Retry a callable for transient failures with exponential backoff."""
     attempt = 0
     while True:

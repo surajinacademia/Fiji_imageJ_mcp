@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-11
+
+### Added
+
+- **PyPI packaging:** static `version` in `pyproject.toml`, `py.typed`, optional `[publish]` extras (`build`, `twine`), CI **packaging smoke** (`python -m build`), and **GitHub Actions → PyPI** workflow ([`publish-pypi.yml`](.github/workflows/publish-pypi.yml)) on **Release published**.
+- **[`RELEASING.md`](RELEASING.md)** — version bump, trusted publishing, and local `twine check` steps.
+
+### Changed
+
+- **`__version__`** now comes from **`importlib.metadata.version("fiji-mcp-server")`** (removed generated `_version.py` / setuptools-scm for simpler releases).
+- README/docs organization, demo asset cleanup, `.gitignore` for generated batch outputs and `mcp_live/` runs.
+
 ## [0.1.0] - 2026-04-11
 
 ### Added

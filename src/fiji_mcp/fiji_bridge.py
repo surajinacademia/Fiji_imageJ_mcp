@@ -88,7 +88,9 @@ def resolve_start_mode(settings: Settings | None = None) -> str:
     configured_mode = settings.fiji_mode
     if configured_mode == "gui":
         # PyImageJ refuses plain `python` on macOS without AppKit on the main thread; optional escape hatch.
-        if platform.system() == "Darwin" and os.environ.get("FIJI_INTERACTIVE_FORCE", "").strip().lower() in {
+        if platform.system() == "Darwin" and os.environ.get(
+            "FIJI_INTERACTIVE_FORCE", ""
+        ).strip().lower() in {
             "1",
             "true",
             "yes",

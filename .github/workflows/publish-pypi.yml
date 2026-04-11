@@ -1,0 +1,38 @@
+# Publish sdist + wheel to PyPI when a GitHub Release is published.
+# Configure PyPI: https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+# (GitHub → surajinacademia/Fiji_imageJ_mcp → workflow "Publish to PyPI" on environment release)
+
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build
+        run: python -m pip install --upgrade pip build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # PyPI Trusted Publishing (OIDC). If not configured, add a repo secret
+        # PYPI_API_TOKEN and uncomment:
+        # with:
+        #   password: ${{ secrets.PYPI_API_TOKEN }}

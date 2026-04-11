@@ -40,7 +40,9 @@ def test_resolve_start_mode_explicit_modes() -> None:
     assert resolve_start_mode(_settings("headless")) == "headless"
 
 
-def test_resolve_start_mode_auto_without_display(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_start_mode_auto_without_display(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from fiji_mcp import fiji_bridge
 
     monkeypatch.setattr(fiji_bridge.platform, "system", lambda: "Linux")

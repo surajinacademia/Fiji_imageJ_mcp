@@ -1,6 +1,13 @@
 # MCP tools
 
-The server exposes **19** tools (FastMCP), grouped below.
+The server exposes **19** tools (FastMCP), grouped below. They run in the **Fiji / PyImageJ process started by the MCP server** (`python -m fiji_mcp` over stdio). That is **not** the same OS process as **Fiji.app** you may open from the desktop; headless MCP is the usual setup in IDEs.
+
+## Calling tools without the IDE (stdio client)
+
+To drive the **same JSON-RPC tool surface** from a terminal script (spawn server subprocess, `call_tool` only), use:
+
+- **`scripts/mcp_and_gui_fiji.py`** — plug-and-play: optional `FIJI_PATH` auto-detect, optional demo image, MCP monitor ticks (`health_check`, `open_image`, `list_open_images`, `get_image_info`, `screenshot_fiji`), optional **Fiji.app** on macOS. See [Install and quick start](quickstart.md) (section *Plug-and-play: `scripts/mcp_and_gui_fiji.py`*).
+- **`scripts/generate_image_analysis_report.py`** — full corpus / report over stdio MCP (see [Batch report workflow](batch_report_workflow.md)).
 
 ## Fiji lifecycle and macros
 

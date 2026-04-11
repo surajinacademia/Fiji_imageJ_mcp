@@ -19,16 +19,21 @@ def _default_demo_image() -> Path | None:
     if preferred.is_file():
         return preferred
     for path in sorted(demo_dir.iterdir()):
-        if path.is_file() and not path.name.startswith(".") and path.suffix.lower() in {
-            ".pgm",
-            ".pbm",
-            ".ppm",
-            ".tif",
-            ".tiff",
-            ".png",
-            ".jpg",
-            ".jpeg",
-        }:
+        if (
+            path.is_file()
+            and not path.name.startswith(".")
+            and path.suffix.lower()
+            in {
+                ".pgm",
+                ".pbm",
+                ".ppm",
+                ".tif",
+                ".tiff",
+                ".png",
+                ".jpg",
+                ".jpeg",
+            }
+        ):
             return path
     return None
 
@@ -47,9 +52,13 @@ def _force_headless_for_fiji_integration(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.integration
 @pytest.mark.timeout(240)
-@pytest.mark.skipif(not _integration_enabled(), reason="Set FIJI_PATH and FIJI_TEST_IMAGE")
+@pytest.mark.skipif(
+    not _integration_enabled(), reason="Set FIJI_PATH and FIJI_TEST_IMAGE"
+)
 def test_fiji_runtime_smoke() -> None:
-    image_path = Path(os.environ.get("FIJI_TEST_IMAGE") or _default_demo_image()).expanduser()
+    image_path = Path(
+        os.environ.get("FIJI_TEST_IMAGE") or _default_demo_image()
+    ).expanduser()
     assert image_path.exists(), f"Missing test image: {image_path}"
 
     health = health_check()

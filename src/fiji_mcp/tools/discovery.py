@@ -24,6 +24,7 @@ from fiji_mcp.schemas.tool_outputs import (
     SearchCommandsResult,
 )
 from fiji_mcp.utils.error_handler import FijiToolError, run_with_timeout
+from fiji_mcp.utils.session_state import log_tool_event
 
 _ANN_READ = ToolAnnotations(readOnlyHint=True, idempotentHint=True)
 _ANN_QUERY = ToolAnnotations(readOnlyHint=True, idempotentHint=True)
@@ -44,7 +45,9 @@ SearchQuery = Annotated[
 ]
 ListLimit = Annotated[
     int,
-    Field(ge=1, le=50_000, description="Maximum number of commands or matches to return."),
+    Field(
+        ge=1, le=50_000, description="Maximum number of commands or matches to return."
+    ),
 ]
 ImageTitle = Annotated[
     str | None,
@@ -125,17 +128,12 @@ def _collect_commands() -> list[dict[str, str]]:
     return commands
 
 
-@mcp.tool(
-    annotations=_ANN_QUERY,
-    description=(
-        "Enumerate Fiji/ImageJ commands from SciJava CommandService and legacy ij.Menus. "
-        "Large installs return thousands of entries; lower limit for faster responses."
-    ),
-)
 def list_all_commands(limit: ListLimit = 500) -> ListAllCommandsResult:
     """List Fiji/ImageJ commands discovered from CommandService and Menus."""
     if limit < 1:
-        raise FijiToolError("limit must be >= 1. Use list_all_commands(limit=100) or similar.")
+        raise FijiToolError(
+            "limit must be >= 1. Use list_all_commands(limit=100) or similar."
+        )
 
     def _list() -> ListAllCommandsResult:
         commands = _collect_commands()
@@ -146,16 +144,15 @@ def list_all_commands(limit: ListLimit = 500) -> ListAllCommandsResult:
             commands=[CommandEntry.model_validate(c) for c in slice_raw],
         )
 
-    return run_with_timeout(_list)
+    result = run_with_timeout(_list)
+    log_tool_event(
+        "list_all_commands",
+        f"returned={result.returned} total={result.total}",
+        {"limit": limit},
+    )
+    return result
 
 
-@mcp.tool(
-    annotations=_ANN_QUERY,
-    description=(
-        "Search installed commands by substring on name/class, plus fuzzy title matching. "
-        "Use before describe_plugin to find the exact menu label."
-    ),
-)
 def search_commands(query: SearchQuery, limit: ListLimit = 25) -> SearchCommandsResult:
     """Search command names and class names by keyword/fuzzy similarity."""
     if not query or not query.strip():
@@ -172,7 +169,8 @@ def search_commands(query: SearchQuery, limit: ListLimit = 25) -> SearchCommands
         keyword_matches = [
             c
             for c in commands
-            if query_lower in c["name"].lower() or query_lower in c["class_name"].lower()
+            if query_lower in c["name"].lower()
+            or query_lower in c["class_name"].lower()
         ]
         fuzzy_names = difflib.get_close_matches(
             query_lower,
@@ -199,16 +197,15 @@ def search_commands(query: SearchQuery, limit: ListLimit = 25) -> SearchCommands
             matches=[CommandEntry.model_validate(c) for c in merged],
         )
 
-    return run_with_timeout(_search)
+    result = run_with_timeout(_search)
+    log_tool_event(
+        "search_commands",
+        f"query={query!r} matches={result.total_matches}",
+        {"limit": limit},
+    )
+    return result
 
 
-@mcp.tool(
-    annotations=_ANN_READ,
-    description=(
-        "Resolve one command by name and return SciJava input metadata when available. "
-        "Legacy ImageJ1-only plugins may omit inputs; use run_macro in that case."
-    ),
-)
 def describe_plugin(command_name: CommandName) -> DescribePluginResult:
     """Describe a command/plugin including command metadata and inputs when available."""
     if not command_name or not command_name.strip():
@@ -261,16 +258,15 @@ def describe_plugin(command_name: CommandName) -> DescribePluginResult:
             ),
         )
 
-    return run_with_timeout(_describe)
+    result = run_with_timeout(_describe)
+    log_tool_event(
+        "describe_plugin",
+        str(result.command.name)[:120],
+        {"inputs": len(result.inputs)},
+    )
+    return result
 
 
-@mcp.tool(
-    annotations=_ANN_READ,
-    description=(
-        "List configured ImageJ update sites (name and URL) when the updater classes are present. "
-        "May return an empty list on minimal installs; see note field."
-    ),
-)
 def list_extensions() -> ListExtensionsResult:
     """Best-effort list of update sites/extensions available in this Fiji install."""
 
@@ -292,17 +288,17 @@ def list_extensions() -> ListExtensionsResult:
         except Exception:
             pass
 
-        return ListExtensionsResult(extensions=update_sites, count=len(update_sites), note=note)
+        return ListExtensionsResult(
+            extensions=update_sites, count=len(update_sites), note=note
+        )
 
-    return run_with_timeout(_list)
+    result = run_with_timeout(_list)
+    log_tool_event("list_extensions", f"count={result.count}", {})
+    return result
 
 
-@mcp.tool(
-    annotations=_ANN_READ,
-    description="List open image windows with id, title, dimensions, and ImageJ type constant."
-)
-def list_open_images() -> ListOpenImagesResult:
-    """List currently open ImageJ windows/images."""
+def open_images_snapshot() -> ListOpenImagesResult:
+    """List open ImageJ windows without appending a session-trace event (for ``get_session_trace``)."""
 
     def _list() -> ListOpenImagesResult:
         _ = get_ij()
@@ -329,13 +325,19 @@ def list_open_images() -> ListOpenImagesResult:
     return run_with_timeout(_list)
 
 
-@mcp.tool(
-    annotations=_ANN_READ,
-    description=(
-        "Read dimensions, channel/frame/slice counts, bit depth, and ROI statistics for one image. "
-        "Uses the front image when image_title is omitted."
-    ),
-)
+def list_open_images() -> ListOpenImagesResult:
+    """List currently open ImageJ windows/images."""
+    result = open_images_snapshot()
+    log_tool_event(
+        "list_open_images",
+        f"count={result.count}",
+        {
+            "titles": [img.title for img in result.images[:16]],
+        },
+    )
+    return result
+
+
 def get_image_info(image_title: ImageTitle = None) -> GetImageInfoResult:
     """Return metadata/statistics for active image or a named image."""
 
@@ -366,4 +368,56 @@ def get_image_info(image_title: ImageTitle = None) -> GetImageInfoResult:
             max=float(stats.max),
         )
 
-    return run_with_timeout(_info)
+    result = run_with_timeout(_info)
+    log_tool_event(
+        "get_image_info",
+        f"{result.title} {result.width}x{result.height} mean={result.mean:.4g}",
+        {"image_title": image_title},
+    )
+    return result
+
+
+mcp.tool(
+    annotations=_ANN_QUERY,
+    description=(
+        "Enumerate Fiji/ImageJ commands from SciJava CommandService and legacy ij.Menus. "
+        "Large installs return thousands of entries; lower limit for faster responses."
+    ),
+)(list_all_commands)
+
+mcp.tool(
+    annotations=_ANN_QUERY,
+    description=(
+        "Search installed commands by substring on name/class, plus fuzzy title matching. "
+        "Use before describe_plugin to find the exact menu label."
+    ),
+)(search_commands)
+
+mcp.tool(
+    annotations=_ANN_READ,
+    description=(
+        "Resolve one command by name and return SciJava input metadata when available. "
+        "Legacy ImageJ1-only plugins may omit inputs; use run_macro in that case."
+    ),
+)(describe_plugin)
+
+mcp.tool(
+    annotations=_ANN_READ,
+    description=(
+        "List configured ImageJ update sites (name and URL) when the updater classes are present. "
+        "May return an empty list on minimal installs; see note field."
+    ),
+)(list_extensions)
+
+mcp.tool(
+    annotations=_ANN_READ,
+    description="List open image windows with id, title, dimensions, and ImageJ type constant.",
+)(list_open_images)
+
+mcp.tool(
+    annotations=_ANN_READ,
+    description=(
+        "Read dimensions, channel/frame/slice counts, bit depth, and ROI statistics for one image. "
+        "Uses the front image when image_title is omitted."
+    ),
+)(get_image_info)

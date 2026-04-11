@@ -6,10 +6,10 @@ This workflow matches the idea of a **long-running, reproducible pipeline** doc 
 
 [`scripts/generate_image_analysis_report.py`](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/scripts/generate_image_analysis_report.py) **spawns the Fiji MCP server over stdio** and drives it with an MCP client (`fastmcp` `Client` + `StdioTransport`). It does **not** import Fiji tool modules in-process, so behavior matches Cursor or Claude calling the same server.
 
-Outputs (defaults):
+Outputs (defaults; **not committed** — both paths are in `.gitignore` so clones stay small):
 
 - `research_output/analysis_raw.json` — structured tool results
-- `docs/fiji_mcp_comprehensive_image_analysis_report.md` — human-readable report (may be overwritten on each run)
+- `docs/fiji_mcp_comprehensive_image_analysis_report.md` — human-readable report (overwritten on each run)
 
 ## Prerequisites
 

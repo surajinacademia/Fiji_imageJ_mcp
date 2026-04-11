@@ -16,7 +16,9 @@ async def test_run_batch_macros_requires_steps() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_batch_macros_continue_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_batch_macros_continue_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _fake_run_macro(macro_code: str, retries: int = 1) -> MacroRunResult:
         if "bad" in macro_code:
             raise RuntimeError("broken")

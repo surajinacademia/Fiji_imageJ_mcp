@@ -12,7 +12,9 @@ from fiji_mcp.utils.error_handler import FijiToolError
 from fiji_mcp.utils.optimizer import EncodedScreenshot
 
 
-def test_full_screen_headless_raises_before_capture(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_full_screen_headless_raises_before_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(screenshot, "get_ij", lambda: MagicMock())
     monkeypatch.setattr(screenshot, "get_bridge_status", lambda: {"mode": "headless"})
     with pytest.raises(FijiToolError, match="full_screen"):
@@ -27,7 +29,11 @@ def test_active_image_headless_passes_gate(monkeypatch: pytest.MonkeyPatch) -> N
         return func()
 
     monkeypatch.setattr(screenshot, "run_with_timeout", _fake_timeout)
-    monkeypatch.setattr(screenshot, "_active_image_to_pil", lambda: Image.new("RGB", (4, 4), color=(1, 2, 3)))
+    monkeypatch.setattr(
+        screenshot,
+        "_active_image_to_pil",
+        lambda: Image.new("RGB", (4, 4), color=(1, 2, 3)),
+    )
     monkeypatch.setattr(
         screenshot,
         "encode_screenshot",

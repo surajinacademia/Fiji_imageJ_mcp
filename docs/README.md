@@ -6,63 +6,17 @@
 
 **Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server for **Fiji / ImageJ**: macros, command discovery, I/O, screenshots, and workflows via **PyImageJ** and **FastMCP**. Works with **Cursor**, **Claude Desktop**, **Claude Code**, **Gemini CLI**, **Windsurf**, and other MCP clients.
 
-<p align="center"><b>Three Fiji examples on <code>demo_images/</code></b> — see <code>scripts/generate_readme_demo_assets.py</code></p>
+## Demos on this repo
 
-<table>
-<tr><th colspan="2" align="center">Example 1 — <code>img07.png</code> → Gaussian blur (σ = 4)</th></tr>
-<tr>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Example 1 input" width="100%" />
-</a>
-<p align="center"><em>Input</em></p>
-</td>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Example 1 blurred" width="100%" />
-</a>
-<p align="center"><em>After Gaussian blur</em></p>
-</td>
-</tr>
-<tr><th colspan="2" align="center">Example 2 — <code>img04.png</code> → Find Edges</th></tr>
-<tr>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg" alt="Example 2 input" width="100%" />
-</a>
-<p align="center"><em>Input</em></p>
-</td>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg" alt="Example 2 edges" width="100%" />
-</a>
-<p align="center"><em>After Find Edges</em></p>
-</td>
-</tr>
-<tr><th colspan="2" align="center">Example 3 — <code>img10.png</code> → threshold + particle count / morphology</th></tr>
-<tr>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_input.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_input.jpg" alt="Example 3 input" width="100%" />
-</a>
-<p align="center"><em>Input</em></p>
-</td>
-<td width="50%">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_overlay.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_overlay.jpg" alt="Particle overlay" width="100%" />
-</a>
-<p align="center"><em>Overlay outlines</em></p>
-</td>
-</tr>
-<tr>
-<td colspan="2" align="center">
-<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_results.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img10_results.jpg" alt="Measurements table" width="95%" />
-</a>
-<p align="center"><em>Per-object measurements (Area, Mean, StdDev, Perimeter, Circ., Feret)</em></p>
-</td>
-</tr>
-</table>
+Three small **pipelines** you can reproduce with `scripts/generate_readme_demo_assets.py` (JPEGs land in `demo_output/readme_ex*.jpg`):
+
+1. **Soft blur** — before/after Gaussian filter.  
+2. **Bright blobs** — threshold + particle outlines + a short **Area / circularity** markdown table on the [GitHub README](https://github.com/surajinacademia/Fiji_imageJ_mcp#see-it-running).  
+3. **Skeleton summary** — mask → skeleton → branch-style markdown excerpt there.
+
+**Full gallery + tables:** [GitHub README → *See it running*](https://github.com/surajinacademia/Fiji_imageJ_mcp#see-it-running).
+
+Regenerate: `FIJI_PATH=… FIJI_MODE=headless python scripts/generate_readme_demo_assets.py`.
 
 > **📌 Note:** Same MCP patterns as [napari-mcp](https://napari-hub.org/plugins/napari-mcp.html). Sibling: [**cellpose_mcp**](https://github.com/surajinacademia/cellpose_mcp). Contact: [ssahu2@ucmerced.edu](mailto:ssahu2@ucmerced.edu).
 
@@ -71,6 +25,7 @@
 ## Browse the docs
 
 - **[Install & quick start](quickstart.md)** — clone, venv, `pip install`, auto vs manual MCP config, verify  
+- **[MCP + GUI smoke](quickstart.md#mcp-and-gui-fiji)** — `scripts/mcp_and_gui_fiji.py` (stdio client + optional Fiji.app)  
 - **[MCP Tools](tools.md)** — all **19** tools  
 - **[Configuration](configuration.md)** — env vars, manual JSON, troubleshooting  
 - **[Architecture](architecture.md)** — layout and data flow  

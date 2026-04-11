@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-from fiji_mcp._version import __version__
+try:
+    __version__ = version("fiji-mcp-server")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
 
 __all__ = ["mcp", "__version__"]
 

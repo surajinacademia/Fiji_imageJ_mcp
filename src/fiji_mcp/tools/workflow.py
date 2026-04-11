@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 from fastmcp.server.context import Context
-from fastmcp.server.dependencies import OptionalCurrentContext
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
@@ -19,36 +18,34 @@ from fiji_mcp.schemas.tool_outputs import (
 from fiji_mcp.tools.macro_runner import run_macro
 from fiji_mcp.tools.screenshot import screenshot_fiji
 from fiji_mcp.utils.error_handler import FijiToolError
+from fiji_mcp.utils.fastmcp_context_compat import OptionalCurrentContext
+from fiji_mcp.utils.session_state import log_tool_event, suppress_macro_tool_trace
 
 _ANN_MUTATE = ToolAnnotations(readOnlyHint=False, destructiveHint=False)
 
-WorkflowSteps = Annotated[
-    list[WorkflowStepInput | dict[str, Any]],
-    Field(
-        description=(
-            'Each step: {"macro", "screenshot_after", '
-            '"screenshot_capture": "full_screen"|"active_image"|"results_table"}.'
-        ),
-    ),
-]
 
-
-@mcp.tool(
-    annotations=_ANN_MUTATE,
-    description=(
-        "Run a scripted pipeline: each step runs a macro, optionally followed by a screenshot. "
-        "Supports MCP progress when the client requests it. Use verify_each_step=false for faster runs."
-    ),
-)
 async def run_workflow(
-    steps: WorkflowSteps,
+    steps: Annotated[
+        list[dict[str, Any]],
+        Field(
+            description=(
+                'Each step: {"macro", "screenshot_after", '
+                '"screenshot_capture": "full_screen"|"active_image"|"results_table"}. '
+                "Defaults use active_image screenshots (headless-safe); use full_screen only with GUI Fiji."
+            ),
+        ),
+    ],
     verify_each_step: Annotated[
         bool,
-        Field(description="If true, append screenshot after each step when screenshot_after allows."),
+        Field(
+            description="If true, append screenshot after each step when screenshot_after allows."
+        ),
     ] = True,
     continue_on_error: Annotated[
         bool,
-        Field(description="If false, stop after the first failing step and return partial results."),
+        Field(
+            description="If false, stop after the first failing step and return partial results."
+        ),
     ] = False,
     ctx: Context | None = OptionalCurrentContext(),
 ) -> RunWorkflowResult:
@@ -59,8 +56,7 @@ async def run_workflow(
         )
 
     coerced_steps: list[WorkflowStepInput] = [
-        WorkflowStepInput.model_validate(s) if isinstance(s, dict) else cast("WorkflowStepInput", s)
-        for s in steps
+        WorkflowStepInput.model_validate(s) for s in steps
     ]
 
     results: list[WorkflowStepSuccess | WorkflowStepFailure] = []
@@ -68,7 +64,9 @@ async def run_workflow(
     for index, step in enumerate(coerced_steps, start=1):
         if ctx is not None:
             try:
-                await ctx.report_progress(index - 1, total, f"Workflow step {index}/{total}")
+                await ctx.report_progress(
+                    index - 1, total, f"Workflow step {index}/{total}"
+                )
                 await ctx.debug(f"Fiji workflow step {index}: executing macro")
             except AttributeError:
                 # OptionalCurrentContext / no MCP client (e.g. asyncio.run from a script).
@@ -79,20 +77,40 @@ async def run_workflow(
             message = f"Step {index} is missing a non-empty 'macro' field."
             if continue_on_error:
                 results.append(WorkflowStepFailure(step=index, error=message))
+                log_tool_event(
+                    "run_workflow",
+                    f"step {index}/{total} skipped (empty macro)",
+                    {"ok": False},
+                )
                 continue
             raise FijiToolError(message)
 
         try:
-            step_result = run_macro(command)
-            entry: WorkflowStepSuccess
-            if verify_each_step and step.screenshot_after:
-                shot = screenshot_fiji(capture_mode=step.screenshot_capture)
-                entry = WorkflowStepSuccess(step=index, result=step_result, screenshot=shot)
-            else:
-                entry = WorkflowStepSuccess(step=index, result=step_result, screenshot=None)
+            with suppress_macro_tool_trace():
+                step_result = run_macro(command)
+                entry: WorkflowStepSuccess
+                if verify_each_step and step.screenshot_after:
+                    shot = screenshot_fiji(capture_mode=step.screenshot_capture)
+                    entry = WorkflowStepSuccess(
+                        step=index, result=step_result, screenshot=shot
+                    )
+                else:
+                    entry = WorkflowStepSuccess(
+                        step=index, result=step_result, screenshot=None
+                    )
             results.append(entry)
+            log_tool_event(
+                "run_workflow",
+                f"step {index}/{total} ok",
+                {"screenshot": bool(entry.screenshot)},
+            )
         except Exception as error:
             results.append(WorkflowStepFailure(step=index, error=str(error)))
+            log_tool_event(
+                "run_workflow",
+                f"step {index}/{total} failed",
+                {"ok": False, "error": str(error)[:400]},
+            )
             if not continue_on_error:
                 return RunWorkflowResult(
                     ok=False,
@@ -108,3 +126,12 @@ async def run_workflow(
         failed_steps=len(failed),
         results=results,
     )
+
+
+mcp.tool(
+    annotations=_ANN_MUTATE,
+    description=(
+        "Run a scripted pipeline: each step runs a macro, optionally followed by a screenshot. "
+        "Supports MCP progress when the client requests it. Use verify_each_step=false for faster runs."
+    ),
+)(run_workflow)

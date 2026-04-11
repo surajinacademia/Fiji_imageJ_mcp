@@ -27,7 +27,9 @@ def _settings_with_roots(*roots: str) -> Settings:
     )
 
 
-def test_resolve_user_path_expands_home(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_resolve_user_path_expands_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     p = tmp_path / "img.tif"
     p.write_bytes(b"x")

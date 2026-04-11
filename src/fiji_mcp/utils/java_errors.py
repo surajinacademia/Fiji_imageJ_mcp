@@ -24,9 +24,7 @@ def friendly_java_hint(exc: BaseException) -> str | None:
             "Confirm FIJI_PATH points to a full Fiji.app with update sites enabled."
         )
     if "illegalargument" in text and "null" in text:
-        return (
-            "ImageJ rejected null/invalid arguments. Check macro parameters and that the expected image is active."
-        )
+        return "ImageJ rejected null/invalid arguments. Check macro parameters and that the expected image is active."
     if "arrayindex" in text or "indexoutofbounds" in text:
         return (
             "An index was out of range (empty ROI, wrong slice, or empty Results table). "
