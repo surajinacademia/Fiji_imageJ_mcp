@@ -6,20 +6,42 @@
 
 **Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI assistants drive **Fiji / ImageJ** through natural language: run macros, search commands, open and save images, capture verification screenshots, and chain multi-step workflows. It is built with **PyImageJ**, **FastMCP**, and stdio MCP so the same server works from **Cursor**, **Claude Desktop**, **Claude Code**, **Gemini CLI**, **Windsurf**, and other MCP-capable hosts.
 
+<p align="center"><b>Two real Fiji runs</b> on bundled <code>demo_images/</code> — <code>open_image</code> → ImageJ macro → <code>screenshot_fiji</code> (<code>active_image</code>), headless. Regenerate: <code>python scripts/generate_readme_demo_assets.py</code> with <code>FIJI_PATH</code> and <code>FIJI_MODE=headless</code>.</p>
+
 <p align="center">
   <table>
     <tr>
+      <th align="center" colspan="2">Example 1 — <code>demo_images/img07.png</code> → Gaussian blur (σ = 4)</th>
+    </tr>
+    <tr>
       <td align="center" width="50%">
         <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg">
-          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Bundled demo image opened in Fiji" width="100%" />
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Example 1: img07 opened in Fiji" width="100%" />
         </a>
-        <p align="center"><em>Input — sample from <code>demo_images/</code>, opened via MCP</em></p>
+        <p align="center"><em>Input after <code>open_image</code></em></p>
       </td>
       <td align="center" width="50%">
         <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg">
-          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Same field after Fiji macro pipeline" width="100%" />
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Example 1: after Gaussian blur" width="100%" />
         </a>
-        <p align="center"><em>After analysis — blur / stats / overlay pipeline (see <code>scripts/generate_readme_demo_assets.py</code>)</em></p>
+        <p align="center"><em>After <code>Gaussian Blur…</code></em></p>
+      </td>
+    </tr>
+    <tr>
+      <th align="center" colspan="2">Example 2 — <code>demo_images/img04.png</code> → Find Edges</th>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg">
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg" alt="Example 2: img04 opened in Fiji" width="100%" />
+        </a>
+        <p align="center"><em>Input after <code>open_image</code></em></p>
+      </td>
+      <td align="center" width="50%">
+        <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg">
+          <img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg" alt="Example 2: after Find Edges" width="100%" />
+        </a>
+        <p align="center"><em>After <code>Find Edges</code></em></p>
       </td>
     </tr>
   </table>

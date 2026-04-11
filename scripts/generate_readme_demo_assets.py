@@ -33,16 +33,19 @@ def _save_b64(path: Path, image_base64: str) -> None:
 
 
 def _close_all() -> None:
+    """Best-effort cleanup; headless WindowManager can NPE on ``selectImage``."""
     from fiji_mcp.tools.macro_runner import run_macro
 
-    run_macro(
-        """
+    try:
+        run_macro(
+            """
 while (nImages > 0) {
-  selectImage(1);
   close();
 }
 """
-    )
+        )
+    except Exception:
+        pass
 
 
 def _example(repo: Path, stem: str, image_rel: str, macro: str, caption_macro: str) -> None:

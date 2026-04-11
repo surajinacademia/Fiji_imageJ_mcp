@@ -6,19 +6,37 @@
 
 **Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server for **Fiji / ImageJ**: macros, command discovery, I/O, screenshots, and workflows via **PyImageJ** and **FastMCP**. Works with **Cursor**, **Claude Desktop**, **Claude Code**, **Gemini CLI**, **Windsurf**, and other MCP clients.
 
+<p align="center"><b>Two Fiji runs on <code>demo_images/</code></b> — same pipeline as <code>scripts/generate_readme_demo_assets.py</code></p>
+
 <table>
+<tr><th colspan="2" align="center">Example 1 — <code>img07.png</code> → Gaussian blur (σ = 4)</th></tr>
 <tr>
 <td width="50%">
 <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Demo input" />
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Example 1 input" width="100%" />
 </a>
-<p align="center"><em>Demo input (<code>demo_images/</code>)</em></p>
+<p align="center"><em>Input</em></p>
 </td>
 <td width="50%">
 <a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg">
-<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Demo analysis" />
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Example 1 blurred" width="100%" />
 </a>
-<p align="center"><em>After Fiji macro pipeline</em></p>
+<p align="center"><em>After Gaussian blur</em></p>
+</td>
+</tr>
+<tr><th colspan="2" align="center">Example 2 — <code>img04.png</code> → Find Edges</th></tr>
+<tr>
+<td width="50%">
+<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg">
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_input.jpg" alt="Example 2 input" width="100%" />
+</a>
+<p align="center"><em>Input</em></p>
+</td>
+<td width="50%">
+<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg">
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img04_analysis.jpg" alt="Example 2 edges" width="100%" />
+</a>
+<p align="center"><em>After Find Edges</em></p>
 </td>
 </tr>
 </table>
