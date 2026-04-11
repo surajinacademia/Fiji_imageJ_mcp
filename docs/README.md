@@ -4,44 +4,38 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE)
 [![CI](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml)
 
-**Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI assistants drive **Fiji / ImageJ** through natural language: macros, command discovery, I/O, screenshots, and workflows—using **PyImageJ** and **FastMCP**.
+**Fiji MCP** is a [Model Context Protocol](https://modelcontextprotocol.io/) server for **Fiji / ImageJ**: macros, command discovery, I/O, screenshots, and workflows via **PyImageJ** and **FastMCP**. Works with **Cursor**, **Claude Desktop**, **Claude Code**, **Gemini CLI**, **Windsurf**, and other MCP clients.
 
-<p align="center">
-  <table>
-    <tr>
-      <td align="center" width="50%">
-        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png">
-          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00.png" alt="Fluorescence microscopy: cytoplasm and nuclei" width="100%" />
-        </a>
-        <sub><b>Widefield fluorescence</b> — cytoplasm and nuclei; open with <code>open_image</code>, then run macros and measurements in Fiji</sub>
-      </td>
-      <td align="center" width="50%">
-        <a href="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png">
-          <img src="https://raw.githubusercontent.com/surajinacademia/cellpose_mcp/main/poster/poster_images/img00_annotated_overlay.png" alt="Same field with analysis overlays" width="100%" />
-        </a>
-        <sub><b>Overlay view</b> — labels and boundaries; use <code>screenshot_fiji</code> and batch tools to document comparable pipelines</sub>
-      </td>
-    </tr>
-  </table>
-</p>
+<table>
+<tr>
+<td width="50%">
+<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg">
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg" alt="Demo input" />
+</a>
+<p align="center"><em>Demo input (<code>demo_images/</code>)</em></p>
+</td>
+<td width="50%">
+<a href="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg">
+<img src="https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_analysis.jpg" alt="Demo analysis" />
+</a>
+<p align="center"><em>After Fiji macro pipeline</em></p>
+</td>
+</tr>
+</table>
 
-<p align="center"><sub>Images from the <a href="https://github.com/surajinacademia/cellpose_mcp">cellpose_mcp</a> poster (same author), illustrating realistic microscopy; Fiji MCP is the ImageJ/Fiji MCP server.</sub></p>
-
-> **Note:** Same MCP-install pattern as [napari-mcp](https://napari-hub.org/plugins/napari-mcp.html). Sibling project: [**cellpose_mcp**](https://github.com/surajinacademia/cellpose_mcp). Contact: [ssahu2@ucmerced.edu](mailto:ssahu2@ucmerced.edu).
+> **📌 Note:** Same MCP patterns as [napari-mcp](https://napari-hub.org/plugins/napari-mcp.html). Sibling: [**cellpose_mcp**](https://github.com/surajinacademia/cellpose_mcp). Contact: [ssahu2@ucmerced.edu](mailto:ssahu2@ucmerced.edu).
 
 ---
 
 ## Browse the docs
 
-- **[Quick Start](quickstart.md)** — install, `FIJI_PATH`, first demo, batch report script, tests
-- **[MCP Tools](tools.md)** — full tool catalog (19 tools)
-- **[Configuration](configuration.md)** — `fiji-mcp-install`, manual JSON, env vars, troubleshooting, Cursor plugin
-- **[Architecture](architecture.md)** — components, data flow, design notes
-- **[Batch report workflow](batch_report_workflow.md)** — stdio MCP batch report script
+- **[Quick Start](quickstart.md)** — install, `FIJI_PATH`, `fiji-mcp-install` targets, demos, tests  
+- **[MCP Tools](tools.md)** — all **19** tools  
+- **[Configuration](configuration.md)** — env vars, manual JSON, troubleshooting  
+- **[Architecture](architecture.md)** — layout and data flow  
+- **[Batch report workflow](batch_report_workflow.md)** — stdio batch report  
 
-Repository README (GitHub landing): [github.com/surajinacademia/Fiji_imageJ_mcp](https://github.com/surajinacademia/Fiji_imageJ_mcp).
-
-Implementation roadmap: [`plan.md`](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md) in the repo root.
+**GitHub README:** [surajinacademia/Fiji_imageJ_mcp](https://github.com/surajinacademia/Fiji_imageJ_mcp) · **Roadmap:** [plan.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md)
 
 ---
 
