@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Repository layout:** per-version `RELEASE_NOTES_v*.md` files moved to [`docs/releases/`](docs/releases/); [`MANIFEST.in`](MANIFEST.in) re-includes them after the `docs/` prune so sdists stay unchanged. Added [`docs/repository_layout.md`](docs/repository_layout.md) and Docsify sidebar links.
+
 ## [0.1.3] - 2026-04-11
 
 ### Changed

@@ -30,6 +30,8 @@ Regenerate: `FIJI_PATH=… FIJI_MODE=headless python scripts/generate_readme_dem
 - **[Configuration](configuration.md)** — env vars, manual JSON, troubleshooting  
 - **[Architecture](architecture.md)** — layout and data flow  
 - **[Batch report workflow](batch_report_workflow.md)** — stdio batch report  
+- **[Repository layout](repository_layout.md)** — where code, docs, scripts, and release drafts live  
+- **[Release notes](releases/)** — per-version GitHub Release digests  
 
 **GitHub README:** [surajinacademia/Fiji_imageJ_mcp](https://github.com/surajinacademia/Fiji_imageJ_mcp) · **Roadmap:** [plan.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/plan.md)
 

@@ -14,6 +14,16 @@ _Last updated: 2026-04-11_
 
 **Active work:** Phase 5 — expand integration coverage, validate against real Fiji installs, and finish packaging/docs as needed for release.
 
+### Still missing from the plan
+
+Open product gaps relative to the original vision (ease of use, recipe depth, and optional native Fiji UI). Priorities are ordered by impact on day-to-day agent + user workflows.
+
+| Item | Priority | Notes |
+|------|----------|--------|
+| **Agent skill / SKILL.md discoverability** | **High** | Workflow guidance ships in the wheel as [`src/fiji_mcp/data/FIJI_MCP_SKILL.md`](src/fiji_mcp/data/FIJI_MCP_SKILL.md) (import path `fiji_mcp.data`), but nothing installs it as a first-class **Cursor / Claude Desktop** skill automatically. The largest ease-of-use gap remains: unless users copy or symlink that file into `.cursor/skills/…` (or equivalent), assistants tend to **re-derive** the **discovery-first → act → verify-with-screenshots** loop every session. Closing this means clearer install UX (CLI subcommand, docs tab, or client-specific skill merge) and/or publishing a companion marketplace skill. |
+| **Template library depth** | **Medium** | The bundled [`macro_templates.json`](src/fiji_mcp/data/macro_templates.json) is a **curated** set (on the order of tens of entries), not an encyclopedia. Many stacks (split/merge channels, Z-project variants, Coloc 2 / TrackMate / Cellpose / CLIJ2 / MorphoLibJ) are covered at **bootstrap or single-command** level; remaining work is **depth**: multi-step, parameterized pipelines; headless-friendly patterns where possible; version-specific command strings; and more domain recipes so agents rely less on one-off macro invention. |
+| **Fiji Java plugin (bidirectional GUI panel)** | **Low** | Optional native ImageJ/Fiji plugin that mirrors or drives MCP session state from the desktop UI (per earlier two-way GUI ideas). **Not started**; rough effort **2–3 weeks** once scoped (IPC, security, and update-site distribution). |
+
 ## Goals
 
 1. **Universal Plugin Access**: Enable LLM to discover and use ANY ImageJ/Fiji plugin or extension without hardcoding

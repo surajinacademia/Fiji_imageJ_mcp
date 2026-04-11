@@ -4,7 +4,7 @@
 
 1. Update **`version`** in [`pyproject.toml`](pyproject.toml) (PEP 440, e.g. `0.1.3`).
 2. Update **[`CHANGELOG.md`](CHANGELOG.md)** — move items from *Unreleased* into a dated section for that version.
-3. Optional: add or refresh **`RELEASE_NOTES_vX.Y.Z.md`** for GitHub Release notes text.
+3. Optional: add or refresh **`docs/releases/RELEASE_NOTES_vX.Y.Z.md`** for GitHub Release notes text (and list it in [`docs/releases/README.md`](docs/releases/README.md)).
 
 `fiji_mcp.__version__` is read from installed package metadata (`importlib.metadata`), so it matches `pyproject.toml` after `pip install` / PyPI.
 

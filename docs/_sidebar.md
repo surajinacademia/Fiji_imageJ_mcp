@@ -4,3 +4,5 @@
 * [Configuration](configuration.md)
 * [Architecture](architecture.md)
 * [Batch report workflow](batch_report_workflow.md)
+* [Repository layout](repository_layout.md)
+* [Release notes](releases/)
