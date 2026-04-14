@@ -5,9 +5,9 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![CI](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml)
 
-**Talk to Fiji / ImageJ in plain English from Cursor, Claude, Gemini, Windsurf, and more.**
+**Ask your AI Agent in plain English to use Fiji / ImageJ to quickly analyze microscopy image also set pipelines from Cursor, Claude, Gemini, etc.**
 
-Open images, run any ImageJ plugin, count cells, measure features, take screenshots to verify — without writing a single line of macro code yourself.
+The goal is that the AI agent should use the right ImageJ plugin, see what you are seeing and also verify its own results by writing codes without relying on vibes. I plan to setup SKILL and AI plugins in future. Would be happy to collaborate. 
 
 <!-- Demo images: absolute raw.githubusercontent.com URLs + Markdown tables (PyPI does not host ./demo_output; raw HTML <img> is less reliable in Warehouse). -->
 
