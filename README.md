@@ -5,9 +5,9 @@
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![CI](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml)
 
-**Ask your AI Agent in plain English to use Fiji / ImageJ to quickly analyze microscopy image also set pipelines from Cursor, Claude, Gemini, etc.**
+**Ask your AI Agent in plain English to use Fiji / ImageJ to quickly analyze microscopy image also set pipelines from Cursor, Claude, Gemini, etc. You simply paste the image or ask it to navigate to the correct file.**
 
-The goal is that the AI agent should use the right ImageJ plugin, see what you are seeing and also verify its own results by writing codes without relying on vibes. I plan to setup SKILL and AI plugins in future. Would be happy to collaborate. 
+The goal is that the AI agent should use the right ImageJ plugin, see what you are seeing and then verify its own results by writing codes without relying on vibes. I plan to setup SKILL and AI plugins in future. Would be happy to collaborate. 
 
 <!-- Demo images: absolute raw.githubusercontent.com URLs + Markdown tables (PyPI does not host ./demo_output; raw HTML <img> is less reliable in Warehouse). -->
 
