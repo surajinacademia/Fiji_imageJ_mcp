@@ -6,6 +6,7 @@
 .venv/
 venv/
 env/
+.worktrees/
 
 # Python
 __pycache__/
