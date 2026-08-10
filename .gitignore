@@ -7,6 +7,7 @@
 venv/
 env/
 .worktrees/
+.superpowers/sdd/
 
 # Python
 __pycache__/
