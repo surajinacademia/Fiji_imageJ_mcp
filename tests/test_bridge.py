@@ -71,6 +71,25 @@ def test_non_eintr_path_failure_is_not_retried(monkeypatch, tmp_path):
     assert attempts == 1
 
 
+def test_runtime_path_failure_is_invalid_configuration_without_retry(monkeypatch):
+    raw_path = "~fiji_mcp_task1_nonexistent_user/Fiji"
+    monkeypatch.setenv("FIJI_PATH", raw_path)
+    original = bridge._resolve_and_validate_root
+    attempts = 0
+
+    def unresolved(path):
+        nonlocal attempts
+        attempts += 1
+        return original(path)
+
+    monkeypatch.setattr(bridge, "_resolve_and_validate_root", unresolved)
+    with pytest.raises(bridge.FijiError, match="Could not validate FIJI_PATH") as raised:
+        bridge.load_settings()
+    assert attempts == 1
+    assert raised.value.code == "invalid_configuration"
+    assert raised.value.retryable is False
+
+
 def test_configuration_error_does_not_poison_unstarted_runtime(monkeypatch, tmp_path):
     monkeypatch.delenv("FIJI_PATH", raising=False)
     bridge._reset_runtime_for_tests()
@@ -99,6 +118,56 @@ def test_failed_jvm_start_is_terminal(monkeypatch, tmp_path):
     assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
     with pytest.raises(bridge.FijiError, match="restart the MCP server"):
         bridge.get_ij()
+
+
+def test_concurrent_first_callers_start_fiji_once(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    bridge._reset_runtime_for_tests()
+    gateway = object()
+    start_entered = threading.Event()
+    release_start = threading.Event()
+    second_attempting = threading.Event()
+    start_calls = 0
+    results = []
+    errors = []
+    results_lock = threading.Lock()
+
+    def start(_settings):
+        nonlocal start_calls
+        start_calls += 1
+        start_entered.set()
+        release_start.wait(timeout=2)
+        return gateway
+
+    def caller(attempting=None):
+        if attempting is not None:
+            attempting.set()
+        try:
+            result = bridge.get_ij()
+        except BaseException as error:
+            with results_lock:
+                errors.append(error)
+        else:
+            with results_lock:
+                results.append(result)
+
+    monkeypatch.setattr(bridge, "_start_fiji", start)
+    first_thread = threading.Thread(target=caller)
+    second_thread = threading.Thread(target=caller, args=(second_attempting,))
+    first_thread.start()
+    assert start_entered.wait(timeout=1)
+    second_thread.start()
+    assert second_attempting.wait(timeout=1)
+    release_start.set()
+    first_thread.join(timeout=1)
+    second_thread.join(timeout=1)
+
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert errors == []
+    assert start_calls == 1
+    assert results == [gateway, gateway]
 
 
 def test_java_stdout_redirect_targets_system_err(monkeypatch):
@@ -137,7 +206,7 @@ def test_exact_java_concurrent_modification_type_retries_once(monkeypatch):
     bridge._reset_runtime_for_tests(ready_ij=object())
     monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
     concurrent_error = type(
-        "ConcurrentModificationException",
+        "java.util.ConcurrentModificationException",
         (Exception,),
         {"__module__": "java.util"},
     )
@@ -158,7 +227,7 @@ def test_exact_headless_exception_gets_gui_recovery(monkeypatch):
     bridge._reset_runtime_for_tests(ready_ij=object())
     monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
     headless_error = type(
-        "HeadlessException",
+        "java.awt.HeadlessException",
         (Exception,),
         {"__module__": "java.awt"},
     )
@@ -260,6 +329,7 @@ def test_worker_holds_operation_lock_until_java_returns():
     bridge._reset_runtime_for_tests(ready_ij=object())
     entered = threading.Event()
     release = threading.Event()
+    second_attempting = threading.Event()
     second_entered = threading.Event()
 
     def first(_ij, _prepared):
@@ -269,13 +339,18 @@ def test_worker_holds_operation_lock_until_java_returns():
     def second(_ij):
         second_entered.set()
 
+    def run_second():
+        second_attempting.set()
+        bridge.run_read("state", second)
+
     first_thread = threading.Thread(
         target=lambda: bridge.run_mutation("script", lambda _ij: None, first)
     )
-    second_thread = threading.Thread(target=lambda: bridge.run_read("state", second))
+    second_thread = threading.Thread(target=run_second)
     first_thread.start()
     assert entered.wait(timeout=1)
     second_thread.start()
+    assert second_attempting.wait(timeout=1)
     assert not second_entered.wait(timeout=0.05)
     release.set()
     first_thread.join(timeout=1)
@@ -288,6 +363,7 @@ async def test_cancelled_delivery_does_not_release_running_worker_lock():
     bridge._reset_runtime_for_tests(ready_ij=object())
     entered = threading.Event()
     release = threading.Event()
+    second_attempting = threading.Event()
     second_entered = threading.Event()
 
     def first(_ij, _prepared):
@@ -307,13 +383,15 @@ async def test_cancelled_delivery_does_not_release_running_worker_lock():
     with pytest.raises(asyncio.CancelledError):
         await first_delivery
 
-    second_delivery = asyncio.create_task(
-        asyncio.to_thread(
-            bridge.run_read,
+    def run_second():
+        second_attempting.set()
+        return bridge.run_read(
             "state",
             lambda _ij: second_entered.set(),
         )
-    )
+
+    second_delivery = asyncio.create_task(asyncio.to_thread(run_second))
+    assert await asyncio.to_thread(second_attempting.wait, 1)
     assert not await asyncio.to_thread(second_entered.wait, 0.05)
     release.set()
     await second_delivery

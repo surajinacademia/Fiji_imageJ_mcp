@@ -106,7 +106,7 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
             break
         except FijiError:
             raise
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
             if attempt == 0 and _is_eintr(error):
                 continue
             raise FijiError(
@@ -182,7 +182,13 @@ def get_ij() -> Any:
 
 def _exception_type_name(error: BaseException) -> str:
     error_type = type(error)
-    qualified_type = f"{error_type.__module__}.{error_type.__name__}"
+    module_name = error_type.__module__
+    class_name = error_type.__name__
+    qualified_type = (
+        class_name
+        if class_name.startswith(f"{module_name}.")
+        else f"{module_name}.{class_name}"
+    )
     java_type = str(getattr(error, "__javaclass__", ""))
     return java_type or qualified_type
 
