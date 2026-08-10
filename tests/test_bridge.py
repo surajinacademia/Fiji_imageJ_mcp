@@ -1,0 +1,320 @@
+from __future__ import annotations
+
+import asyncio
+import errno
+import threading
+from pathlib import Path
+
+import pytest
+
+from fiji_mcp import bridge
+
+
+def _fiji_root(tmp_path: Path) -> Path:
+    (tmp_path / "jars").mkdir()
+    (tmp_path / "plugins").mkdir()
+    return tmp_path
+
+
+def test_settings_require_real_fiji_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("FIJI_PATH", str(tmp_path))
+    monkeypatch.delenv("FIJI_MODE", raising=False)
+    with pytest.raises(bridge.FijiError, match="jars/.*plugins/"):
+        bridge.load_settings()
+
+
+def test_settings_are_only_path_and_mode(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    monkeypatch.setenv("FIJI_MODE", "gui")
+    assert bridge.load_settings() == bridge.Settings(root.resolve(), "gui")
+
+
+def test_invalid_mode_is_rejected(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    monkeypatch.setenv("FIJI_MODE", "smart")
+    with pytest.raises(bridge.FijiError, match="headless or gui"):
+        bridge.load_settings()
+
+
+def test_path_validation_retries_one_eintr_before_jvm_start(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    original = bridge._resolve_and_validate_root
+    attempts = 0
+
+    def interrupted_once(raw_path):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError(errno.EINTR, "interrupted")
+        return original(raw_path)
+
+    monkeypatch.setattr(bridge, "_resolve_and_validate_root", interrupted_once)
+    assert bridge.load_settings().fiji_path == root.resolve()
+    assert attempts == 2
+
+
+def test_non_eintr_path_failure_is_not_retried(monkeypatch, tmp_path):
+    monkeypatch.setenv("FIJI_PATH", str(tmp_path))
+    attempts = 0
+
+    def denied(_raw_path):
+        nonlocal attempts
+        attempts += 1
+        raise OSError(errno.EACCES, "denied")
+
+    monkeypatch.setattr(bridge, "_resolve_and_validate_root", denied)
+    with pytest.raises(bridge.FijiError, match="validate FIJI_PATH"):
+        bridge.load_settings()
+    assert attempts == 1
+
+
+def test_configuration_error_does_not_poison_unstarted_runtime(monkeypatch, tmp_path):
+    monkeypatch.delenv("FIJI_PATH", raising=False)
+    bridge._reset_runtime_for_tests()
+    with pytest.raises(bridge.FijiError, match="FIJI_PATH is required"):
+        bridge.get_ij()
+    assert bridge.runtime_snapshot()["lifecycle"] == "NEW"
+
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    gateway = object()
+    monkeypatch.setattr(bridge, "_start_fiji", lambda _settings: gateway)
+    assert bridge.get_ij() is gateway
+
+
+def test_failed_jvm_start_is_terminal(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    monkeypatch.setenv("FIJI_PATH", str(root))
+    bridge._reset_runtime_for_tests()
+    monkeypatch.setattr(
+        bridge,
+        "_start_fiji",
+        lambda settings: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    with pytest.raises(bridge.FijiError, match="restart the MCP server"):
+        bridge.get_ij()
+    assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
+    with pytest.raises(bridge.FijiError, match="restart the MCP server"):
+        bridge.get_ij()
+
+
+def test_java_stdout_redirect_targets_system_err(monkeypatch):
+    import scyjava as sj
+
+    class FakeSystem:
+        err = object()
+        received = None
+
+        @classmethod
+        def setOut(cls, stream):
+            cls.received = stream
+
+    monkeypatch.setattr(sj, "jimport", lambda name: FakeSystem)
+    bridge._redirect_java_stdout()
+    assert FakeSystem.received is FakeSystem.err
+
+
+def test_read_retries_only_allowlisted_failure(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    attempts = 0
+
+    def interrupted(_ij):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError(errno.EINTR, "interrupted")
+        return 42
+
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    assert bridge.run_read("state", interrupted) == 42
+    assert attempts == 2
+
+
+def test_exact_java_concurrent_modification_type_retries_once(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    concurrent_error = type(
+        "ConcurrentModificationException",
+        (Exception,),
+        {"__module__": "java.util"},
+    )
+    attempts = 0
+
+    def concurrent_once(_ij):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise concurrent_error()
+        return 42
+
+    assert bridge.run_read("state", concurrent_once) == 42
+    assert attempts == 2
+
+
+def test_exact_headless_exception_gets_gui_recovery(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    headless_error = type(
+        "HeadlessException",
+        (Exception,),
+        {"__module__": "java.awt"},
+    )
+    with pytest.raises(bridge.FijiError) as raised:
+        bridge.run_read(
+            "screenshot",
+            lambda _ij: (_ for _ in ()).throw(headless_error()),
+        )
+    assert raised.value.code == "gui_required"
+    assert "FIJI_MODE=gui" in raised.value.recovery
+
+
+def test_unknown_read_failure_is_not_retried(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    attempts = 0
+
+    def fail(_ij):
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("message mentions java.util.ConcurrentModificationException")
+
+    with pytest.raises(bridge.FijiError) as raised:
+        bridge.run_read("state", fail)
+    assert attempts == 1
+    assert raised.value.code == "java_bridge_failure"
+
+
+def test_dead_jvm_disables_retry_and_requires_restart(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: False)
+    with pytest.raises(bridge.FijiError, match="restart the MCP server"):
+        bridge.run_read(
+            "state",
+            lambda _ij: (_ for _ in ()).throw(InterruptedError("interrupted")),
+        )
+    assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
+
+
+def test_pre_dispatch_failure_is_definitely_failed(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    dispatched = False
+
+    def prepare(_ij):
+        raise RuntimeError("could not resolve command")
+
+    def dispatch(_ij, _prepared):
+        nonlocal dispatched
+        dispatched = True
+
+    with pytest.raises(bridge.FijiError) as raised:
+        bridge.run_mutation("command", prepare, dispatch)
+    assert raised.value.outcome is bridge.Outcome.FAILED
+    assert dispatched is False
+
+
+def test_allowlisted_pre_dispatch_read_retries_before_one_dispatch(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    prepare_attempts = 0
+    dispatch_attempts = 0
+
+    def prepare(_ij):
+        nonlocal prepare_attempts
+        prepare_attempts += 1
+        if prepare_attempts == 1:
+            raise OSError(errno.EINTR, "interrupted")
+        return "resolved"
+
+    def dispatch(_ij, prepared):
+        nonlocal dispatch_attempts
+        dispatch_attempts += 1
+        return prepared
+
+    assert bridge.run_mutation("command", prepare, dispatch) == "resolved"
+    assert prepare_attempts == 2
+    assert dispatch_attempts == 1
+
+
+def test_dispatched_mutation_is_never_retried_and_outcome_is_unknown(monkeypatch):
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    attempts = 0
+
+    def fail(_ij, _prepared):
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("bridge vanished")
+
+    with pytest.raises(bridge.FijiError) as raised:
+        bridge.run_mutation("script", lambda _ij: None, fail)
+    assert attempts == 1
+    assert raised.value.code == "unknown_outcome"
+    assert raised.value.outcome is bridge.Outcome.UNKNOWN
+
+
+def test_worker_holds_operation_lock_until_java_returns():
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    entered = threading.Event()
+    release = threading.Event()
+    second_entered = threading.Event()
+
+    def first(_ij, _prepared):
+        entered.set()
+        release.wait(timeout=2)
+
+    def second(_ij):
+        second_entered.set()
+
+    first_thread = threading.Thread(
+        target=lambda: bridge.run_mutation("script", lambda _ij: None, first)
+    )
+    second_thread = threading.Thread(target=lambda: bridge.run_read("state", second))
+    first_thread.start()
+    assert entered.wait(timeout=1)
+    second_thread.start()
+    assert not second_entered.wait(timeout=0.05)
+    release.set()
+    first_thread.join(timeout=1)
+    second_thread.join(timeout=1)
+    assert second_entered.is_set()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_delivery_does_not_release_running_worker_lock():
+    bridge._reset_runtime_for_tests(ready_ij=object())
+    entered = threading.Event()
+    release = threading.Event()
+    second_entered = threading.Event()
+
+    def first(_ij, _prepared):
+        entered.set()
+        release.wait(timeout=2)
+
+    first_delivery = asyncio.create_task(
+        asyncio.to_thread(
+            bridge.run_mutation,
+            "script",
+            lambda _ij: None,
+            first,
+        )
+    )
+    assert await asyncio.to_thread(entered.wait, 1)
+    first_delivery.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first_delivery
+
+    second_delivery = asyncio.create_task(
+        asyncio.to_thread(
+            bridge.run_read,
+            "state",
+            lambda _ij: second_entered.set(),
+        )
+    )
+    assert not await asyncio.to_thread(second_entered.wait, 0.05)
+    release.set()
+    await second_delivery
+    assert second_entered.is_set()
