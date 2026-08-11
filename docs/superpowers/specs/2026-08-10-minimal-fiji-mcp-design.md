@@ -177,7 +177,7 @@ Supported targets are `active_image` and `results`.
 
 For `active_image`, the server renders the current C/Z/T plane using its current display range and LUT, compositing the visible overlay and ROI when present. It does not capture window chrome. For `results`, it renders a deterministic white table with black monospace text, original column order, headings, and up to the first 100 rows, followed by an omission marker when more rows exist. `get_results` remains the complete data interface.
 
-Both targets are rendered at their natural size and proportionally reduced, never enlarged, when either dimension exceeds 2,048 pixels. The returned and optionally saved PNG contain the same rendered pixels. The tool returns native MCP image content plus basic dimensions. Saving before and after captures gives `compare_screenshots` stateless inputs without creating a cache or session store.
+Active-image captures are rendered at their natural size and proportionally reduced, never enlarged, when either dimension exceeds 2,048 pixels. Results captures instead bound the text canvas to 2,048 pixels per dimension before allocation, clip overflowing rows or columns, and report `content_truncated: true`. The returned and optionally saved PNG contain the same rendered pixels. The tool returns native MCP image content plus basic dimensions. Saving before and after captures gives `compare_screenshots` stateless inputs without creating a cache or session store.
 
 ### 6.9 `compare_screenshots(before_path, after_path, save_path=None)`
 
