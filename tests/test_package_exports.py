@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import copy
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
 
 try:
     import tomllib
@@ -13,6 +18,92 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 only
     import tomli as tomllib
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _release_workflow() -> dict[str, Any]:
+    workflow = yaml.safe_load(Path(".github/workflows/publish-pypi.yml").read_text())
+    assert isinstance(workflow, dict)
+    return workflow
+
+
+def _assert_release_workflow_security(workflow: dict[str, Any]) -> None:
+    expected_jobs = {
+        "build": {
+            "runs-on": "ubuntu-latest",
+            "permissions": {"contents": "read"},
+            "steps": [
+                {
+                    "name": "Check out the release source",
+                    "uses": "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+                },
+                {
+                    "name": "Set up Python",
+                    "uses": "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                    "with": {"python-version": "3.12", "cache": "pip"},
+                },
+                {
+                    "name": "Install reviewed build and validation tools",
+                    "run": (
+                        'python -m pip install "pip==25.3" '
+                        '"setuptools==84.0.0" "wheel==0.45.1" '
+                        '"build==1.4.0" "twine==6.2.0" "fastmcp==2.14.3"'
+                    ),
+                },
+                {
+                    "name": "Build distribution",
+                    "run": "python -m build --no-isolation",
+                },
+                {
+                    "name": "Freeze distribution artifact",
+                    "uses": (
+                        "actions/upload-artifact@"
+                        "ea165f8d65b6e75b540449e92b4886f43607fa02"
+                    ),
+                    "with": {
+                        "name": "python-dist",
+                        "path": "dist/",
+                        "if-no-files-found": "error",
+                    },
+                },
+                {
+                    "name": "Validate distribution",
+                    "run": "python -m twine check dist/*",
+                },
+                {
+                    "name": "Smoke-test installed wheel",
+                    "run": (
+                        "python tests/wheel_smoke.py "
+                        "dist/fiji_mcp_server-0.2.0-py3-none-any.whl"
+                    ),
+                },
+            ],
+        },
+        "publish": {
+            "needs": "build",
+            "runs-on": "ubuntu-latest",
+            "permissions": {"id-token": "write"},
+            "steps": [
+                {
+                    "name": "Download frozen distribution",
+                    "uses": (
+                        "actions/download-artifact@"
+                        "d3f86a106a0bac45b974a628896c90dbdf5c8093"
+                    ),
+                    "with": {"name": "python-dist", "path": "dist/"},
+                },
+                {
+                    "name": "Publish to PyPI",
+                    "uses": (
+                        "pypa/gh-action-pypi-publish@"
+                        "cef221092ed1bacb1cc03d23a2d87d1d172e277b"
+                    ),
+                },
+            ],
+        },
+    }
+
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["jobs"] == expected_jobs
 
 
 def test_package_import_keeps_mcp_lazy() -> None:
@@ -54,14 +145,47 @@ def test_runtime_dependencies_are_minimal():
     }
 
 
-def test_publish_workflow_provisions_wheel_smoke_client_dependency() -> None:
-    workflow = Path(".github/workflows/publish-pypi.yml").read_text()
-    validator_install = next(
-        line.strip()
-        for line in workflow.splitlines()
-        if line.strip().startswith("run: python -m pip install --upgrade")
+def test_publish_workflow_matches_complete_security_contract() -> None:
+    _assert_release_workflow_security(_release_workflow())
+
+
+def test_publish_workflow_rejects_duplicate_artifact_upload() -> None:
+    workflow = copy.deepcopy(_release_workflow())
+    build_steps = workflow["jobs"]["build"]["steps"]
+    build_steps.append(
+        {
+            "name": "Replace frozen artifact",
+            "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+            "with": {"name": "python-dist", "path": "dist/", "overwrite": True},
+        }
     )
 
-    assert validator_install == (
-        'run: python -m pip install --upgrade pip build twine "fastmcp>=2.10.3"'
+    with pytest.raises(AssertionError):
+        _assert_release_workflow_security(workflow)
+
+
+def test_publish_workflow_rejects_extra_privileged_action() -> None:
+    workflow = copy.deepcopy(_release_workflow())
+    publish_steps = workflow["jobs"]["publish"]["steps"]
+    publish_steps.insert(
+        1,
+        {
+            "name": "Unexpected privileged action",
+            "uses": "example/action@1111111111111111111111111111111111111111",
+        },
     )
+
+    with pytest.raises(AssertionError):
+        _assert_release_workflow_security(workflow)
+
+
+def test_publish_workflow_rejects_extra_install_command() -> None:
+    workflow = copy.deepcopy(_release_workflow())
+    build_steps = workflow["jobs"]["build"]["steps"]
+    build_steps.insert(
+        3,
+        {"name": "Replace reviewed tools", "run": "python -m pip install latest"},
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_release_workflow_security(workflow)
