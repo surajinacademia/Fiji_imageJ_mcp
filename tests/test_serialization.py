@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import subprocess
+import sys
+
+import pytest
 
 from fiji_mcp import bridge
 from fiji_mcp.bridge import to_jsonable
@@ -117,6 +122,65 @@ class _JavaIterable:
         return self._iterator
 
 
+class _JavaEntrySet:
+    def __init__(self, entries: list[_MapEntry]) -> None:
+        self._iterator = _JavaIterator(entries)
+
+    def iterator(self) -> _JavaIterator:
+        return self._iterator
+
+
+class _IteratorMap:
+    def __init__(self, entries: list[_MapEntry]) -> None:
+        self._entry_set = _JavaEntrySet(entries)
+
+    def entrySet(self) -> _JavaEntrySet:
+        return self._entry_set
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.util.LinkedHashMap")
+
+
+class _GuardedInfiniteJavaIterator:
+    def __init__(self, value: object) -> None:
+        self._value = value
+        self.next_calls = 0
+
+    def hasNext(self) -> bool:
+        return True
+
+    def next(self) -> object:
+        self.next_calls += 1
+        if self.next_calls > 101:
+            raise AssertionError("serializer consumed more than 101 Java items")
+        return self._value
+
+
+class _GuardedInfiniteJavaIterable:
+    def __init__(self, value: object) -> None:
+        self._iterator = _GuardedInfiniteJavaIterator(value)
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.util.ArrayList")
+
+    def iterator(self) -> _GuardedInfiniteJavaIterator:
+        return self._iterator
+
+
+class _GuardedInfiniteJavaMap:
+    def __init__(self) -> None:
+        self._iterator = _GuardedInfiniteJavaIterator(_MapEntry("key", "value"))
+
+    def entrySet(self) -> _GuardedInfiniteJavaMap:
+        return self
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.util.LinkedHashMap")
+
+    def iterator(self) -> _GuardedInfiniteJavaIterator:
+        return self._iterator
+
+
 class _IteratorOnly:
     def __init__(self, values: list[object]) -> None:
         self._iterator = _JavaIterator(values)
@@ -174,6 +238,38 @@ class _Dataset:
         return 5
 
 
+class _AxisType:
+    def __init__(self, label: str) -> None:
+        self._label = label
+
+    def getLabel(self) -> str:
+        return self._label
+
+
+class _Axis:
+    def __init__(self, label: str) -> None:
+        self._type = _AxisType(label)
+
+    def type(self) -> _AxisType:
+        return self._type
+
+
+class _ReorderedAxisDataset(_Dataset):
+    _dimensions = (5, 3, 64, 2, 48)
+    _axes = ("Time", "Z", "X", "Channel", "Y")
+
+    def axis(self, index: int) -> _Axis:
+        return _Axis(self._axes[index])
+
+    def dimension(self, index: int) -> int:
+        return self._dimensions[index]
+
+
+class _CompositeImage(_ImagePlus):
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("ij.CompositeImage")
+
+
 class _ResultsTable:
     def getClass(self) -> _JavaClass:
         return _JavaClass("ij.measure.ResultsTable")
@@ -194,6 +290,120 @@ class _PluginResult:
 
     def __str__(self) -> str:
         return self._summary
+
+
+class _BoundedInfiniteList(list[int]):
+    def __init__(self) -> None:
+        self.yield_count = 0
+
+    def __iter__(self):
+        while True:
+            self.yield_count += 1
+            if self.yield_count > 101:
+                raise AssertionError("serializer consumed more than 101 list values")
+            yield self.yield_count
+
+    def __len__(self) -> int:
+        raise AssertionError("serializer must not trust a list subclass length")
+
+
+class _InstrumentedHugeList(list[int]):
+    def __init__(self) -> None:
+        super().__init__(range(10_000))
+        self.yield_count = 0
+
+    def __iter__(self):
+        for value in super().__iter__():
+            self.yield_count += 1
+            yield value
+
+
+class _BoundedInfiniteTuple(tuple[int, ...]):
+    def __new__(cls) -> _BoundedInfiniteTuple:
+        instance = super().__new__(cls)
+        instance.yield_count = 0
+        return instance
+
+    def __iter__(self):
+        while True:
+            self.yield_count += 1
+            if self.yield_count > 101:
+                raise AssertionError("serializer consumed more than 101 tuple values")
+            yield self.yield_count
+
+    def __len__(self) -> int:
+        raise AssertionError("serializer must not trust a tuple subclass length")
+
+
+class _BoundedInfiniteSet(set[int]):
+    def __init__(self) -> None:
+        self.yield_count = 0
+
+    def __iter__(self):
+        while True:
+            self.yield_count += 1
+            if self.yield_count > 101:
+                raise AssertionError("serializer consumed more than 101 set values")
+            yield self.yield_count
+
+    def __len__(self) -> int:
+        raise AssertionError("serializer must not trust a set subclass length")
+
+
+class _BoundedInfiniteDict(dict[str, int]):
+    def __init__(self, first_key: str | None = None) -> None:
+        self.first_key = first_key
+        self.yield_count = 0
+
+    def items(self):
+        while True:
+            self.yield_count += 1
+            if self.yield_count > 101:
+                raise AssertionError("serializer consumed more than 101 map entries")
+            key = self.first_key if self.yield_count == 1 else f"key-{self.yield_count}"
+            yield key, self.yield_count
+
+    def __len__(self) -> int:
+        raise AssertionError("serializer must not trust a dict subclass length")
+
+
+class _LongTypeCollection:
+    def __init__(self) -> None:
+        self._iterator = _JavaIterator(["x" * 4_000] * 100)
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("x" * 70_000)
+
+    def iterator(self) -> _JavaIterator:
+        return self._iterator
+
+
+class _ExplodingCoercion:
+    def __bool__(self) -> bool:
+        raise RuntimeError("bool failed")
+
+    def __float__(self) -> float:
+        raise RuntimeError("float failed")
+
+    def __int__(self) -> int:
+        raise RuntimeError("int failed")
+
+    def __str__(self) -> str:
+        raise RuntimeError("str failed")
+
+
+class _ExplodingJavaPrimitive:
+    def __init__(self, java_type: str, method_name: str) -> None:
+        self._java_type = java_type
+        self._method_name = method_name
+
+    def __getattr__(self, name: str):
+        if name == self._method_name:
+            return lambda: _ExplodingCoercion()
+        raise AttributeError(name)
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass(self._java_type)
 
 
 def test_non_finite_numbers_are_standard_json_values():
@@ -330,3 +540,191 @@ def test_java_boxed_primitives_become_json_primitives():
     assert to_jsonable(
         [_JavaBoolean(True), _JavaInteger(7), _JavaDouble(1.25), _JavaString("value")]
     ) == [True, 7, 1.25, "value"]
+
+
+def test_exact_builtin_sequences_report_exact_omissions_without_full_copies():
+    result = to_jsonable(list(range(102)))
+    assert result[-1] == {"truncated_items": 2}
+
+
+def test_huge_list_subclasses_are_not_fully_materialized():
+    value = _InstrumentedHugeList()
+    result = to_jsonable(value)
+    assert value.yield_count == 101
+    assert result[-1] == {"truncated_items_at_least": 1}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        _BoundedInfiniteList(),
+        _BoundedInfiniteTuple(),
+        _BoundedInfiniteSet(),
+    ],
+)
+def test_hostile_python_container_subclasses_are_sampled_at_101(value: object):
+    result = to_jsonable(value)
+    assert value.yield_count == 101  # type: ignore[attr-defined]
+    assert result[-1] == {"truncated_items_at_least": 1}
+
+
+def test_hostile_mapping_subclasses_are_sampled_at_101():
+    value = _BoundedInfiniteDict()
+    result = to_jsonable(value)
+    assert value.yield_count == 101
+    assert result["map_entries"][-1] == {"truncated_items_at_least": 1}
+
+
+def test_java_iterators_report_exact_and_lower_bound_truncation_truthfully():
+    exact = _JavaIterable(list(range(101)))
+    assert to_jsonable(exact)[-1] == {"truncated_items": 1}
+    assert exact._iterator.next_calls == 101
+
+    beyond_one = _JavaIterable(list(range(102)))
+    assert to_jsonable(beyond_one)[-1] == {"truncated_items_at_least": 2}
+    assert beyond_one._iterator.next_calls == 101
+
+    large = _JavaIterable(list(range(10_000)))
+    assert to_jsonable(large)[-1] == {"truncated_items_at_least": 2}
+    assert large._iterator.next_calls == 101
+
+
+def test_infinite_java_iterators_and_maps_stop_after_one_probe():
+    values = _GuardedInfiniteJavaIterable("value")
+    assert to_jsonable(values)[-1] == {"truncated_items_at_least": 2}
+    assert values._iterator.next_calls == 101
+
+    mapping = _GuardedInfiniteJavaMap()
+    result = to_jsonable(mapping)
+    assert result["map_entries"][-1] == {"truncated_items_at_least": 2}
+    assert mapping._iterator.next_calls == 101
+
+
+def test_java_maps_distinguish_exact_and_unknown_remainders():
+    exact = _IteratorMap([_MapEntry(f"key-{index}", index) for index in range(101)])
+    result = to_jsonable(exact)
+    assert result["__truncated_items__"] == 1
+
+    unknown = _IteratorMap([_MapEntry(f"key-{index}", index) for index in range(102)])
+    result = to_jsonable(unknown)
+    assert result["map_entries"][-1] == {"truncated_items_at_least": 2}
+
+    large = _IteratorMap([_MapEntry(f"key-{index}", index) for index in range(10_000)])
+    result = to_jsonable(large)
+    assert result["map_entries"][-1] == {"truncated_items_at_least": 2}
+    assert large._entry_set._iterator.next_calls == 101
+
+
+def test_string_key_collisions_and_reserved_markers_use_ordered_entries():
+    first = "x" * 4_001
+    second = "x" * 4_000 + "y"
+    python_result = to_jsonable({first: 1, second: 2})
+    assert [entry["value"] for entry in python_result["map_entries"]] == [1, 2]
+
+    java_result = to_jsonable(
+        _JavaMap([_MapEntry(_JavaString(first), 1), _MapEntry(_JavaString(second), 2)])
+    )
+    assert [entry["value"] for entry in java_result["map_entries"]] == [1, 2]
+
+    exact = {
+        "__truncated_items__": "preserve",
+        **{f"key-{index}": index for index in range(100)},
+    }
+    result = to_jsonable(exact)
+    assert result["map_entries"][0] == {
+        "key": "__truncated_items__",
+        "value": "preserve",
+    }
+    assert result["map_entries"][-1] == {"truncated_items": 1}
+
+    unknown = _BoundedInfiniteDict("__truncated_items_at_least__")
+    result = to_jsonable(unknown)
+    assert result["map_entries"][0] == {
+        "key": "__truncated_items_at_least__",
+        "value": 1,
+    }
+    assert result["map_entries"][-1] == {"truncated_items_at_least": 1}
+
+
+def test_oversized_fallback_caps_long_proxy_type_names():
+    result = to_jsonable(_LongTypeCollection())
+    assert result["truncated"] is True
+    assert len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 65_536
+    assert len(result.get("java_type", "")) <= 4_000
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        _ExplodingJavaPrimitive("java.lang.Boolean", "booleanValue"),
+        _ExplodingJavaPrimitive("java.lang.Integer", "intValue"),
+        _ExplodingJavaPrimitive("java.lang.Double", "doubleValue"),
+        _ExplodingJavaPrimitive("java.lang.String", "toString"),
+    ],
+)
+def test_proxy_coercion_failures_become_bounded_opaque_summaries(value: object):
+    result = to_jsonable(value)
+    assert result["java_type"].startswith("java.lang.")
+    assert len(result["summary"]) <= 4_000
+
+
+def test_dataset_axis_metadata_controls_dimension_assignment():
+    assert to_jsonable(_ReorderedAxisDataset()) == {
+        "title": "dataset",
+        "width": 64,
+        "height": 48,
+        "channels": 2,
+        "slices": 3,
+        "frames": 5,
+        "bit_depth": 32,
+    }
+
+
+def test_complete_imageplus_contract_recognizes_composite_images_without_pixels():
+    assert to_jsonable(_CompositeImage()) == {
+        "title": "cells",
+        "width": 64,
+        "height": 48,
+        "channels": 2,
+        "slices": 3,
+        "frames": 4,
+        "bit_depth": 16,
+    }
+
+
+def test_set_order_uses_canonical_converted_json_across_hash_seeds():
+    code = r"""
+import json
+from fiji_mcp.bridge import to_jsonable
+
+class JavaClass:
+    def __init__(self, name): self.name = name
+    def getName(self): return self.name
+
+class JavaIterator:
+    def __init__(self, values): self.values, self.index = values, 0
+    def hasNext(self): return self.index < len(self.values)
+    def next(self):
+        value = self.values[self.index]
+        self.index += 1
+        return value
+
+class Value:
+    def __init__(self, token, value): self.token, self.value = token, value
+    def getClass(self): return JavaClass("java.util.ArrayList")
+    def iterator(self): return JavaIterator([self.value])
+    def __str__(self): return "same summary"
+    def __hash__(self): return hash(self.token)
+    def __eq__(self, other): return self is other
+
+print(json.dumps(to_jsonable({Value("alpha", 1), Value("beta", 2), Value("gamma", 3), Value("delta", 4)})))
+"""
+    outputs = []
+    for hash_seed in ("1", "2", "3"):
+        environment = {**os.environ, "PYTHONHASHSEED": hash_seed}
+        outputs.append(
+            subprocess.check_output(  # noqa: S603 - runs this test's literal code
+                [sys.executable, "-c", code], env=environment, text=True
+            ).strip()
+        )
+    assert outputs == ["[[1], [2], [3], [4]]"] * 3

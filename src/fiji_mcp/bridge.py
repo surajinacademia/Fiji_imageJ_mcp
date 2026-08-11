@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import heapq
 import json
 import math
 import os
@@ -10,6 +11,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from itertools import islice
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
@@ -70,9 +72,18 @@ class FijiError(RuntimeError):
         )
 
 
-def _qualified_python_type(value: Any) -> str:
-    value_type = type(value)
-    return f"{value_type.__module__}.{value_type.__qualname__}"
+@dataclass(frozen=True)
+class _BoundedItems:
+    """A sample plus truthful information about values intentionally omitted."""
+
+    items: list[Any]
+    exact_omitted: int = 0
+    at_least_omitted: int = 0
+    probe: Any = _MISSING
+
+
+def _cap_text(value: str) -> str:
+    return value[:_MAX_STRING]
 
 
 def _truncate_string(value: str) -> str:
@@ -81,28 +92,21 @@ def _truncate_string(value: str) -> str:
     return value[: _MAX_STRING - 1] + "…"
 
 
-def _summary(value: Any) -> str:
-    """Produce a bounded diagnostic summary without inspecting object contents."""
+def _safe_text(value: Any) -> str | None:
     try:
-        return str(value)[:_MAX_STRING]
-    except Exception:
-        return f"<{_qualified_python_type(value)}>"
-
-
-def _java_type_name(value: Any) -> str | None:
-    """Return the Java runtime class name when this is a Java proxy."""
-    try:
-        get_class = getattr(value, "getClass", None)
-        if not callable(get_class):
-            return None
-        java_class = get_class()
-        get_name = getattr(java_class, "getName", None)
-        if not callable(get_name):
-            return None
-        name = get_name()
-        return str(name) if name is not None else None
+        return str(value)
     except Exception:
         return None
+
+
+def _qualified_python_type(value: Any) -> str:
+    value_type = type(value)
+    return _cap_text(f"{value_type.__module__}.{value_type.__qualname__}")
+
+
+def _summary(value: Any) -> str:
+    """Produce a bounded diagnostic summary without inspecting object contents."""
+    return _cap_text(_safe_text(value) or "<unavailable>")
 
 
 def _call_named(value: Any, method_name: str, *args: Any) -> Any:
@@ -116,11 +120,49 @@ def _call_named(value: Any, method_name: str, *args: Any) -> Any:
         return _MISSING
 
 
+def _java_type_name(value: Any) -> str | None:
+    """Return a capped Java runtime class name when this is a Java proxy."""
+    get_class = _call_named(value, "getClass")
+    if get_class is _MISSING:
+        return None
+    name = _call_named(get_class, "getName")
+    if name is _MISSING or name is None:
+        return None
+    text = _safe_text(name)
+    return _cap_text(text) if text is not None else None
+
+
+def _resolved_type_name(value: Any, java_type: str | None = None) -> str:
+    return java_type or _java_type_name(value) or _qualified_python_type(value)
+
+
+def _safe_bool(value: Any) -> bool | None:
+    try:
+        return bool(value)
+    except Exception:
+        return None
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
 def _unbox_java_primitive(value: Any, java_type: str | None) -> Any:
     """Return a Python primitive for supported boxed Java values."""
     if java_type == "java.lang.Boolean":
         raw_value = _call_named(value, "booleanValue")
-        return bool(raw_value) if raw_value is not _MISSING else _MISSING
+        result = _safe_bool(raw_value) if raw_value is not _MISSING else None
+        return result if result is not None else _MISSING
 
     integer_methods = {
         "java.lang.Byte": "byteValue",
@@ -131,12 +173,8 @@ def _unbox_java_primitive(value: Any, java_type: str | None) -> Any:
     integer_method = integer_methods.get(java_type)
     if integer_method is not None:
         raw_value = _call_named(value, integer_method)
-        if raw_value is _MISSING:
-            return _MISSING
-        try:
-            return int(raw_value)
-        except (TypeError, ValueError):
-            return _MISSING
+        result = _safe_int(raw_value) if raw_value is not _MISSING else None
+        return result if result is not None else _MISSING
 
     float_methods = {
         "java.lang.Float": "floatValue",
@@ -145,24 +183,14 @@ def _unbox_java_primitive(value: Any, java_type: str | None) -> Any:
     float_method = float_methods.get(java_type)
     if float_method is not None:
         raw_value = _call_named(value, float_method)
-        if raw_value is _MISSING:
-            return _MISSING
-        try:
-            return float(raw_value)
-        except (TypeError, ValueError):
-            return _MISSING
+        result = _safe_float(raw_value) if raw_value is not _MISSING else None
+        return result if result is not None else _MISSING
 
-    if java_type == "java.lang.Character":
-        raw_value = _call_named(value, "charValue")
-        if raw_value is _MISSING:
-            return _MISSING
-        return _truncate_string(str(raw_value))
-
-    if java_type == "java.lang.String":
-        raw_value = _call_named(value, "toString")
-        if raw_value is _MISSING:
-            return _MISSING
-        return _truncate_string(str(raw_value))
+    if java_type in {"java.lang.Character", "java.lang.String"}:
+        method_name = "charValue" if java_type == "java.lang.Character" else "toString"
+        raw_value = _call_named(value, method_name)
+        text = _safe_text(raw_value) if raw_value is not _MISSING else None
+        return _truncate_string(text) if text is not None else _MISSING
 
     return _MISSING
 
@@ -172,12 +200,7 @@ def _integer_from_method(value: Any, method_name: str, *args: Any) -> int | None
     if raw_value is _MISSING:
         return None
     unboxed = _unbox_java_primitive(raw_value, _java_type_name(raw_value))
-    if unboxed is not _MISSING:
-        raw_value = unboxed
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError):
-        return None
+    return _safe_int(unboxed if unboxed is not _MISSING else raw_value)
 
 
 def _text_from_method(value: Any, method_name: str) -> str | None:
@@ -187,57 +210,102 @@ def _text_from_method(value: Any, method_name: str) -> str | None:
     unboxed = _unbox_java_primitive(raw_value, _java_type_name(raw_value))
     if isinstance(unboxed, str):
         return unboxed
-    return _truncate_string(str(raw_value))
+    text = _safe_text(raw_value)
+    return _truncate_string(text) if text is not None else None
+
+
+def _fixed_image_summary(image: Any) -> dict[str, Any] | None:
+    """Read only the fixed ImagePlus metadata contract, never pixel data."""
+    title = _text_from_method(image, "getTitle")
+    width = _integer_from_method(image, "getWidth")
+    height = _integer_from_method(image, "getHeight")
+    channels = _integer_from_method(image, "getNChannels")
+    slices = _integer_from_method(image, "getNSlices")
+    frames = _integer_from_method(image, "getNFrames")
+    bit_depth = _integer_from_method(image, "getBitDepth")
+    if None in (title, width, height, channels, slices, frames, bit_depth):
+        return None
+    return {
+        "title": title,
+        "width": width,
+        "height": height,
+        "channels": channels,
+        "slices": slices,
+        "frames": frames,
+        "bit_depth": bit_depth,
+    }
+
+
+def _axis_label(axis: Any) -> str | None:
+    axis_type = _call_named(axis, "type")
+    if axis_type is _MISSING:
+        return None
+    for candidate in (axis_type, axis):
+        for method_name in ("getLabel", "getName"):
+            label = _text_from_method(candidate, method_name)
+            if label is not None:
+                return label.casefold()
+        if isinstance(candidate, str):
+            return candidate.casefold()
+    text = _safe_text(axis_type)
+    return text.casefold() if text is not None else None
+
+
+def _dataset_dimension_summary(image: Any, dimensions: int) -> dict[str, int] | None:
+    values = {"width": 1, "height": 1, "channels": 1, "slices": 1, "frames": 1}
+    axis_fields = {
+        "x": "width",
+        "y": "height",
+        "channel": "channels",
+        "c": "channels",
+        "z": "slices",
+        "time": "frames",
+        "t": "frames",
+    }
+    found_axis_metadata = False
+    for index in range(dimensions):
+        axis = _call_named(image, "axis", index)
+        if axis is _MISSING:
+            continue
+        field = axis_fields.get(_axis_label(axis) or "")
+        if field is None:
+            continue
+        size = _integer_from_method(image, "dimension", index)
+        if size is not None:
+            values[field] = size
+            found_axis_metadata = True
+
+    if found_axis_metadata:
+        return values
+
+    for index, field in enumerate(("width", "height", "channels", "slices", "frames")):
+        if index >= dimensions:
+            break
+        size = _integer_from_method(image, "dimension", index)
+        if size is None:
+            return None
+        values[field] = size
+    return values
+
+
+def _dataset_summary(image: Any, java_type: str | None) -> dict[str, Any] | None:
+    if java_type is None or not java_type.endswith("Dataset"):
+        return None
+    title = _text_from_method(image, "getName")
+    dimensions = _integer_from_method(image, "numDimensions")
+    bit_depth = _integer_from_method(image, "getValidBits")
+    if title is None or dimensions is None or bit_depth is None or dimensions < 0:
+        return None
+    values = _dataset_dimension_summary(image, dimensions)
+    if values is None:
+        return None
+    return {"title": title, **values, "bit_depth": bit_depth}
 
 
 def _image_summary_if_supported(
     image: Any, java_type: str | None
 ) -> dict[str, Any] | None:
-    """Read fixed metadata only; intentionally never request image pixel data."""
-    if java_type == "ij.ImagePlus" or (
-        java_type is not None and java_type.endswith(".ImagePlus")
-    ):
-        title = _text_from_method(image, "getTitle")
-        width = _integer_from_method(image, "getWidth")
-        height = _integer_from_method(image, "getHeight")
-        channels = _integer_from_method(image, "getNChannels")
-        slices = _integer_from_method(image, "getNSlices")
-        frames = _integer_from_method(image, "getNFrames")
-        bit_depth = _integer_from_method(image, "getBitDepth")
-        if None not in (title, width, height, channels, slices, frames, bit_depth):
-            return {
-                "title": title,
-                "width": width,
-                "height": height,
-                "channels": channels,
-                "slices": slices,
-                "frames": frames,
-                "bit_depth": bit_depth,
-            }
-
-    if java_type is not None and java_type.endswith("Dataset"):
-        title = _text_from_method(image, "getName")
-        dimensions = _integer_from_method(image, "numDimensions")
-        bit_depth = _integer_from_method(image, "getValidBits")
-        if title is None or dimensions is None or bit_depth is None or dimensions < 2:
-            return None
-
-        width = _integer_from_method(image, "dimension", 0)
-        height = _integer_from_method(image, "dimension", 1)
-        channels = _integer_from_method(image, "dimension", 2) if dimensions > 2 else 1
-        slices = _integer_from_method(image, "dimension", 3) if dimensions > 3 else 1
-        frames = _integer_from_method(image, "dimension", 4) if dimensions > 4 else 1
-        if None not in (width, height, channels, slices, frames):
-            return {
-                "title": title,
-                "width": width,
-                "height": height,
-                "channels": channels,
-                "slices": slices,
-                "frames": frames,
-                "bit_depth": bit_depth,
-            }
-    return None
+    return _fixed_image_summary(image) or _dataset_summary(image, java_type)
 
 
 def image_summary(image: Any) -> dict[str, Any]:
@@ -260,47 +328,111 @@ def _results_table_summary(value: Any, java_type: str | None) -> dict[str, int] 
     return {"rows": rows, "columns": last_column + 1}
 
 
-def _bounded_java_iterator(iterator: Any) -> tuple[list[Any], int] | None:
-    """Read at most the limit plus one item from a Java Iterator."""
+def _marker_for(bounded: _BoundedItems) -> dict[str, int] | None:
+    if bounded.exact_omitted:
+        return {"truncated_items": bounded.exact_omitted}
+    if bounded.at_least_omitted:
+        return {"truncated_items_at_least": bounded.at_least_omitted}
+    return None
+
+
+def _mapping_marker_key(bounded: _BoundedItems) -> str | None:
+    if bounded.exact_omitted:
+        return "__truncated_items__"
+    if bounded.at_least_omitted:
+        return "__truncated_items_at_least__"
+    return None
+
+
+def _bounded_exact_sequence(value: list[Any] | tuple[Any, ...]) -> _BoundedItems:
+    total = len(value)
+    sample = value[: _MAX_ITEMS + 1]
+    items = list(sample[:_MAX_ITEMS])
+    return _BoundedItems(
+        items,
+        exact_omitted=max(total - _MAX_ITEMS, 0),
+        probe=sample[_MAX_ITEMS] if len(sample) > _MAX_ITEMS else _MISSING,
+    )
+
+
+def _bounded_exact_mapping(value: dict[Any, Any]) -> _BoundedItems:
+    total = len(value)
+    sample = list(islice(value.items(), _MAX_ITEMS + 1))
+    return _BoundedItems(
+        sample[:_MAX_ITEMS],
+        exact_omitted=max(total - _MAX_ITEMS, 0),
+        probe=sample[_MAX_ITEMS] if len(sample) > _MAX_ITEMS else _MISSING,
+    )
+
+
+def _bounded_python_iterable(value: Any) -> _BoundedItems | None:
+    """Consume at most 101 values; subclasses cannot force full traversal."""
+    try:
+        iterator = iter(value)
+    except Exception:
+        return None
     items: list[Any] = []
     for _ in range(_MAX_ITEMS):
-        has_next = _call_named(iterator, "hasNext")
-        if has_next is _MISSING:
+        try:
+            items.append(next(iterator))
+        except StopIteration:
+            return _BoundedItems(items)
+        except Exception:
             return None
-        if not bool(has_next):
-            return items, 0
+    try:
+        probe = next(iterator)
+    except StopIteration:
+        return _BoundedItems(items)
+    except Exception:
+        return None
+    return _BoundedItems(items, at_least_omitted=1, probe=probe)
+
+
+def _bounded_java_iterator(iterator: Any) -> _BoundedItems | None:
+    """Consume 100 values plus one probe, then only inspect hasNext()."""
+    items: list[Any] = []
+    for _ in range(_MAX_ITEMS):
+        raw_has_next = _call_named(iterator, "hasNext")
+        if raw_has_next is _MISSING:
+            return None
+        has_next = _safe_bool(raw_has_next)
+        if has_next is None:
+            return None
+        if not has_next:
+            return _BoundedItems(items)
         item = _call_named(iterator, "next")
         if item is _MISSING:
             return None
         items.append(item)
 
-    has_next = _call_named(iterator, "hasNext")
-    if has_next is _MISSING or not bool(has_next):
-        return (items, 0) if has_next is not _MISSING else None
-    if _call_named(iterator, "next") is _MISSING:
+    raw_has_next = _call_named(iterator, "hasNext")
+    if raw_has_next is _MISSING:
         return None
-    return items, 1
-
-
-def _bounded_python_iterable(value: Any) -> tuple[list[Any], int] | None:
-    """Read at most the limit plus one item without materializing the iterable."""
-    try:
-        iterator = iter(value)
-        items: list[Any] = []
-        for _ in range(_MAX_ITEMS):
-            item = next(iterator, _MISSING)
-            if item is _MISSING:
-                return items, 0
-            items.append(item)
-        return items, int(next(iterator, _MISSING) is not _MISSING)
-    except Exception:
+    has_next = _safe_bool(raw_has_next)
+    if has_next is None:
         return None
+    if not has_next:
+        return _BoundedItems(items)
+    probe = _call_named(iterator, "next")
+    if probe is _MISSING:
+        return None
+    raw_has_more = _call_named(iterator, "hasNext")
+    if raw_has_more is _MISSING:
+        return None
+    has_more = _safe_bool(raw_has_more)
+    if has_more is None:
+        return None
+    if has_more:
+        return _BoundedItems(items, at_least_omitted=2, probe=probe)
+    return _BoundedItems(items, exact_omitted=1, probe=probe)
 
 
-def _bounded_items(value: Any) -> tuple[list[Any], int] | None:
+def _bounded_items(value: Any) -> _BoundedItems | None:
     iterator = _call_named(value, "iterator")
     if iterator is not _MISSING:
         return _bounded_java_iterator(iterator)
+    if type(value) in {list, tuple}:
+        return _bounded_exact_sequence(value)
     return _bounded_python_iterable(value)
 
 
@@ -311,57 +443,172 @@ def _string_map_key(value: Any) -> str | None:
     return unboxed if isinstance(unboxed, str) else None
 
 
-def _convert_java_map(value: Any, *, depth: int, seen: set[int]) -> Any:
+def _pair_from_entry(entry: Any) -> tuple[Any, Any] | None:
+    key = _call_named(entry, "getKey")
+    item = _call_named(entry, "getValue")
+    return (key, item) if key is not _MISSING and item is not _MISSING else None
+
+
+def _bounded_java_pairs(value: Any) -> _BoundedItems | None:
     entry_set = _call_named(value, "entrySet")
     if entry_set is _MISSING:
-        return _MISSING
-    bounded_entries = _bounded_items(entry_set)
-    if bounded_entries is None:
-        return _MISSING
-    entries, truncated_items = bounded_entries
+        return None
+    bounded = _bounded_items(entry_set)
+    if bounded is None:
+        return None
+    pairs = [_pair_from_entry(entry) for entry in bounded.items]
+    if any(pair is None for pair in pairs):
+        return None
+    probe = (
+        _pair_from_entry(bounded.probe) if bounded.probe is not _MISSING else _MISSING
+    )
+    return _BoundedItems(
+        [pair for pair in pairs if pair is not None],
+        exact_omitted=bounded.exact_omitted,
+        at_least_omitted=bounded.at_least_omitted,
+        probe=probe,
+    )
 
+
+def _mapping_pairs(value: Any) -> _BoundedItems | None:
+    if type(value) is dict:
+        return _bounded_exact_mapping(value)
+    bounded = _bounded_python_iterable(_call_named(value, "items"))
+    if bounded is None:
+        return None
     pairs: list[tuple[Any, Any]] = []
-    for entry in entries:
-        key = _call_named(entry, "getKey")
-        item = _call_named(entry, "getValue")
-        if key is _MISSING or item is _MISSING:
-            return _MISSING
+    for pair in bounded.items:
+        try:
+            key, item = pair
+        except Exception:
+            return None
         pairs.append((key, item))
+    probe: Any = _MISSING
+    if bounded.probe is not _MISSING:
+        try:
+            probe = tuple(bounded.probe)
+            if len(probe) != 2:
+                return None
+        except Exception:
+            return None
+    return _BoundedItems(
+        pairs,
+        exact_omitted=bounded.exact_omitted,
+        at_least_omitted=bounded.at_least_omitted,
+        probe=probe,
+    )
 
-    string_keys = [_string_map_key(key) for key, _ in pairs]
-    if truncated_items == 0 and all(key is not None for key in string_keys):
-        return {
+
+def _object_map_keys(bounded: _BoundedItems) -> list[str] | None:
+    keys = [_string_map_key(key) for key, _ in bounded.items]
+    if any(key is None for key in keys):
+        return None
+    normalized = [key for key in keys if key is not None]
+    marker_key = _mapping_marker_key(bounded)
+    if len(normalized) != len(set(normalized)) or (
+        marker_key is not None and marker_key in normalized
+    ):
+        return None
+    if marker_key is None:
+        return normalized
+    if bounded.exact_omitted != 1 or not isinstance(bounded.probe, tuple):
+        return None
+    probe_key = _string_map_key(bounded.probe[0])
+    if probe_key is None or probe_key in normalized or probe_key == marker_key:
+        return None
+    return normalized
+
+
+def _convert_pairs(bounded: _BoundedItems, *, depth: int, seen: set[int]) -> Any:
+    keys = _object_map_keys(bounded)
+    marker = _marker_for(bounded)
+    if keys is not None:
+        converted = {
             key: _convert(item, depth=depth + 1, seen=seen)
-            for key, (_, item) in zip(string_keys, pairs, strict=True)
+            for key, (_, item) in zip(keys, bounded.items, strict=True)
         }
+        marker_key = _mapping_marker_key(bounded)
+        if marker is not None and marker_key is not None:
+            converted[marker_key] = next(iter(marker.values()))
+        return converted
 
-    converted_entries = [
+    entries = [
         {
             "key": _convert(key, depth=depth + 1, seen=seen),
             "value": _convert(item, depth=depth + 1, seen=seen),
         }
-        for key, item in pairs
+        for key, item in bounded.items
     ]
-    if truncated_items:
-        converted_entries.append({"truncated_items": truncated_items})
-    return {"map_entries": converted_entries}
+    if marker is not None:
+        entries.append(marker)
+    return {"map_entries": entries}
 
 
-def _convert_java_collection(value: Any, *, depth: int, seen: set[int]) -> Any:
-    bounded_items = _bounded_items(value)
-    if bounded_items is None:
-        return _MISSING
-    items, truncated_items = bounded_items
-    converted = [_convert(item, depth=depth + 1, seen=seen) for item in items]
-    if truncated_items:
-        converted.append({"truncated_items": truncated_items})
+def _canonical_element(value: Any, *, depth: int, seen: set[int]) -> tuple[str, Any]:
+    converted = _convert(value, depth=depth + 1, seen=seen)
+    try:
+        encoded = json.dumps(
+            converted,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        return encoded, json.loads(encoded)
+    except Exception:
+        opaque = {"truncated": True, "reason": "element conversion failed"}
+        return json.dumps(opaque, sort_keys=True), opaque
+
+
+def _convert_set(
+    value: set[Any] | frozenset[Any], *, depth: int, seen: set[int]
+) -> Any:
+    if type(value) in {set, frozenset}:
+        total = len(value)
+        candidates = (
+            _canonical_element(item, depth=depth, seen=seen) for item in value
+        )
+        selected = heapq.nsmallest(_MAX_ITEMS, candidates, key=lambda item: item[0])
+        selected.sort(key=lambda item: item[0])
+        bounded = _BoundedItems(
+            [converted for _, converted in selected],
+            exact_omitted=max(total - _MAX_ITEMS, 0),
+        )
+    else:
+        sample = _bounded_python_iterable(value)
+        if sample is None:
+            return _MISSING
+        selected = [
+            _canonical_element(item, depth=depth, seen=seen) for item in sample.items
+        ]
+        selected.sort(key=lambda item: item[0])
+        bounded = _BoundedItems(
+            [converted for _, converted in selected],
+            exact_omitted=sample.exact_omitted,
+            at_least_omitted=sample.at_least_omitted,
+        )
+    converted = list(bounded.items)
+    marker = _marker_for(bounded)
+    if marker is not None:
+        converted.append(marker)
     return converted
 
 
-def _stable_set_key(value: Any) -> str:
-    return (
-        f"{_java_type_name(value) or _qualified_python_type(value)}:{_summary(value)}"
-    )
+def _convert_sequence(
+    bounded: _BoundedItems, *, depth: int, seen: set[int]
+) -> list[Any]:
+    converted = [_convert(item, depth=depth + 1, seen=seen) for item in bounded.items]
+    marker = _marker_for(bounded)
+    if marker is not None:
+        converted.append(marker)
+    return converted
+
+
+def _opaque_result(value: Any, java_type: str | None = None) -> dict[str, str]:
+    return {
+        "java_type": _resolved_type_name(value, java_type),
+        "summary": _summary(value),
+    }
 
 
 def _convert(value: Any, *, depth: int, seen: set[int]) -> Any:
@@ -384,45 +631,32 @@ def _convert(value: Any, *, depth: int, seen: set[int]) -> Any:
     seen.add(identity)
     try:
         if isinstance(value, dict):
-            items = list(value.items())
-            if all(isinstance(key, str) for key, _ in items):
-                converted = {
-                    _truncate_string(key): _convert(item, depth=depth + 1, seen=seen)
-                    for key, item in items[:_MAX_ITEMS]
-                }
-                if len(items) > _MAX_ITEMS:
-                    converted["__truncated_items__"] = len(items) - _MAX_ITEMS
-                return converted
-            entries = [
-                {
-                    "key": _convert(key, depth=depth + 1, seen=seen),
-                    "value": _convert(item, depth=depth + 1, seen=seen),
-                }
-                for key, item in items[:_MAX_ITEMS]
-            ]
-            if len(items) > _MAX_ITEMS:
-                entries.append({"truncated_items": len(items) - _MAX_ITEMS})
-            return {"map_entries": entries}
+            bounded = _mapping_pairs(value)
+            return (
+                _convert_pairs(bounded, depth=depth, seen=seen)
+                if bounded
+                else _opaque_result(value)
+            )
 
         if isinstance(value, (list, tuple)):
-            items = list(value)
-            converted = [
-                _convert(item, depth=depth + 1, seen=seen)
-                for item in items[:_MAX_ITEMS]
-            ]
-            if len(items) > _MAX_ITEMS:
-                converted.append({"truncated_items": len(items) - _MAX_ITEMS})
-            return converted
+            bounded = (
+                _bounded_exact_sequence(value)
+                if type(value) in {list, tuple}
+                else _bounded_python_iterable(value)
+            )
+            return (
+                _convert_sequence(bounded, depth=depth, seen=seen)
+                if bounded
+                else _opaque_result(value)
+            )
 
         if isinstance(value, (set, frozenset)):
-            items = sorted(value, key=_stable_set_key)
-            converted = [
-                _convert(item, depth=depth + 1, seen=seen)
-                for item in items[:_MAX_ITEMS]
-            ]
-            if len(items) > _MAX_ITEMS:
-                converted.append({"truncated_items": len(items) - _MAX_ITEMS})
-            return converted
+            converted_set = _convert_set(value, depth=depth, seen=seen)
+            return (
+                converted_set
+                if converted_set is not _MISSING
+                else _opaque_result(value)
+            )
 
         java_type = _java_type_name(value)
         unboxed = _unbox_java_primitive(value, java_type)
@@ -437,39 +671,46 @@ def _convert(value: Any, *, depth: int, seen: set[int]) -> Any:
         if table is not None:
             return table
 
-        converted_map = _convert_java_map(value, depth=depth, seen=seen)
-        if converted_map is not _MISSING:
-            return converted_map
+        map_items = _bounded_java_pairs(value)
+        if map_items is not None:
+            return _convert_pairs(map_items, depth=depth, seen=seen)
 
-        converted_collection = _convert_java_collection(value, depth=depth, seen=seen)
-        if converted_collection is not _MISSING:
-            return converted_collection
+        collection_items = _bounded_items(value)
+        if collection_items is not None:
+            return _convert_sequence(collection_items, depth=depth, seen=seen)
 
-        return {
-            "java_type": java_type or _qualified_python_type(value),
-            "summary": _summary(value),
-        }
+        return _opaque_result(value, java_type)
     finally:
         seen.discard(identity)
+
+
+def _encoded_json(value: Any) -> bytes | None:
+    try:
+        return json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except Exception:
+        return None
+
+
+def _oversized_fallback(value: Any) -> dict[str, Any]:
+    fallback = {
+        "truncated": True,
+        "reason": "serialized result exceeds 64 KiB",
+        "java_type": _resolved_type_name(value),
+        "summary": _summary(value),
+    }
+    encoded = _encoded_json(fallback)
+    if encoded is not None and len(encoded) <= _MAX_JSON_BYTES:
+        return fallback
+    return {"truncated": True, "reason": "serialized result exceeds 64 KiB"}
 
 
 def to_jsonable(value: Any) -> Any:
     """Convert a Fiji result into bounded, standard-JSON-compatible data."""
     converted = _convert(value, depth=0, seen=set())
-    try:
-        encoded = json.dumps(converted, ensure_ascii=False, allow_nan=False).encode(
-            "utf-8"
-        )
-    except (TypeError, ValueError):
-        encoded = b""
-    if encoded and len(encoded) <= _MAX_JSON_BYTES:
+    encoded = _encoded_json(converted)
+    if encoded is not None and len(encoded) <= _MAX_JSON_BYTES:
         return converted
-    return {
-        "truncated": True,
-        "reason": "serialized result exceeds 64 KiB",
-        "java_type": _java_type_name(value) or _qualified_python_type(value),
-        "summary": _summary(value),
-    }
+    return _oversized_fallback(value)
 
 
 _OPERATION_LOCK = threading.RLock()
