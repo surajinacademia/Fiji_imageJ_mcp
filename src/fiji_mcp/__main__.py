@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import sys
-
-from fiji_mcp.config.settings import load_settings
-from fiji_mcp.utils.server_logging import configure_server_logging
 
 
 def main() -> None:
     """Run the MCP server on stdio transport."""
-    configure_server_logging()
-    try:
-        load_settings()
-    except ValueError as error:
-        print(f"fiji-mcp-server: invalid configuration: {error}", file=sys.stderr)
-        raise SystemExit(2) from error
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        stream=sys.stderr,
+    )
+    logging.getLogger(__name__).info("Starting Fiji MCP stdio server")
 
     from fiji_mcp.server import mcp
 

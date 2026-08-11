@@ -1,16 +1,46 @@
-"""Server bootstrap that registers tool modules."""
+"""Explicit registration for Fiji's public MCP tools."""
 
-from fiji_mcp.utils.server_logging import configure_server_logging
+from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
-configure_server_logging()
-
-from fiji_mcp.mcp_instance import mcp
-from fiji_mcp.tools import (  # noqa: F401
-    discovery,
-    macro_runner,
+from fiji_mcp import __version__
+from fiji_mcp.tools import (
+    compare_screenshots,
+    get_results,
+    get_state,
+    open_image,
+    run_command,
+    run_script,
+    save_image,
     screenshot,
-    structured_tools,
-    workflow,
+    search_commands,
 )
+
+mcp = FastMCP(
+    "Fiji MCP Server",
+    version=__version__,
+    instructions=(
+        "Control one local Fiji instance. Use search_commands and run_command for registered "
+        "plugins; use run_script for IJM/Groovy fallback. This trusted local server can execute "
+        "arbitrary scripts. Fiji operations run sequentially."
+    ),
+)
+
+READ = ToolAnnotations(readOnlyHint=True, idempotentHint=True)
+CHANGE = ToolAnnotations(readOnlyHint=False, destructiveHint=False)
+DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
+
+for function, annotations in (
+    (get_state, READ),
+    (search_commands, READ),
+    (run_command, DESTRUCTIVE),
+    (run_script, DESTRUCTIVE),
+    (open_image, CHANGE),
+    (save_image, DESTRUCTIVE),
+    (get_results, READ),
+    (screenshot, DESTRUCTIVE),
+    (compare_screenshots, DESTRUCTIVE),
+):
+    mcp.tool(annotations=annotations, output_schema=None)(function)
 
 __all__ = ["mcp"]

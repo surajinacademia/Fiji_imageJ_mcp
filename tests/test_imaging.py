@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from fiji_mcp import _minimal_tools as minimal
 from fiji_mcp import imaging
+from fiji_mcp import tools as minimal
 from fiji_mcp.bridge import FijiError, Outcome
 from fiji_mcp.imaging import (
     RenderedPNG,

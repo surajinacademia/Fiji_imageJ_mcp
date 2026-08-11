@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import scyjava as sj
 
-from fiji_mcp import _minimal_tools as minimal
 from fiji_mcp import bridge
+from fiji_mcp import tools as minimal
 from fiji_mcp.bridge import FijiError, Outcome
 
 COMMANDS = [
