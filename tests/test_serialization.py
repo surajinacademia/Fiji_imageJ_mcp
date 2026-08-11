@@ -265,6 +265,36 @@ class _ReorderedAxisDataset(_Dataset):
         return self._dimensions[index]
 
 
+class _AxisDataset(_Dataset):
+    def __init__(self, labels: tuple[str, ...], dimensions: tuple[int, ...]) -> None:
+        self._axes = labels
+        self._dimensions = dimensions
+        self.axis_calls = 0
+
+    def axis(self, index: int) -> _Axis:
+        self.axis_calls += 1
+        return _Axis(self._axes[index])
+
+    def dimension(self, index: int) -> int:
+        return self._dimensions[index]
+
+    def numDimensions(self) -> int:
+        return len(self._dimensions)
+
+
+class _OversizedAxisDataset(_Dataset):
+    def __init__(self, dimensions: int) -> None:
+        self._dimensions = dimensions
+        self.axis_calls = 0
+
+    def axis(self, index: int) -> _Axis:
+        self.axis_calls += 1
+        return _Axis("X")
+
+    def numDimensions(self) -> int:
+        return self._dimensions
+
+
 class _CompositeImage(_ImagePlus):
     def getClass(self) -> _JavaClass:
         return _JavaClass("ij.CompositeImage")
@@ -404,6 +434,33 @@ class _ExplodingJavaPrimitive:
 
     def getClass(self) -> _JavaClass:
         return _JavaClass(self._java_type)
+
+
+class _TenThousandTailPair:
+    def __init__(self) -> None:
+        self.reads = 0
+
+    def __iter__(self) -> _TenThousandTailPair:
+        return self
+
+    def __next__(self) -> object:
+        self.reads += 1
+        if self.reads == 1:
+            return "probe"
+        if self.reads == 2:
+            return "value"
+        if self.reads > 3:
+            raise AssertionError("serializer read beyond the bounded pair probe")
+        return "extra"
+
+
+class _ProbePairMapping(dict[str, int]):
+    def __init__(self, probe: _TenThousandTailPair) -> None:
+        self._probe = probe
+
+    def items(self):
+        yield from ((f"key-{index}", index) for index in range(100))
+        yield self._probe
 
 
 def test_non_finite_numbers_are_standard_json_values():
@@ -728,3 +785,42 @@ print(json.dumps(to_jsonable({Value("alpha", 1), Value("beta", 2), Value("gamma"
             ).strip()
         )
     assert outputs == ["[[1], [2], [3], [4]]"] * 3
+
+
+def test_mapping_probe_pair_parser_stops_after_three_subitems():
+    probe = _TenThousandTailPair()
+    result = to_jsonable(_ProbePairMapping(probe))
+    assert probe.reads == 3
+    assert result["java_type"].endswith("._ProbePairMapping")
+
+
+@pytest.mark.parametrize("dimensions", [-1, 17])
+def test_dataset_axis_probes_are_capped_before_any_axis_call(dimensions: int):
+    dataset = _OversizedAxisDataset(dimensions)
+    result = to_jsonable(dataset)
+    assert dataset.axis_calls == 0
+    assert result["java_type"] == "net.imagej.Dataset"
+
+
+def test_unrecognized_axis_metadata_never_falls_back_to_position():
+    dataset = _AxisDataset(("Latitude", "Longitude"), (80, 40))
+    result = to_jsonable(dataset)
+    assert dataset.axis_calls == 2
+    assert result["java_type"] == "net.imagej.Dataset"
+
+
+def test_partial_standard_axis_metadata_requires_xy_but_defaults_other_axes():
+    valid = _AxisDataset(("X", "Y"), (64, 48))
+    assert to_jsonable(valid) == {
+        "title": "dataset",
+        "width": 64,
+        "height": 48,
+        "channels": 1,
+        "slices": 1,
+        "frames": 1,
+        "bit_depth": 32,
+    }
+
+    missing_y = _AxisDataset(("X", "Z"), (64, 3))
+    result = to_jsonable(missing_y)
+    assert result["java_type"] == "net.imagej.Dataset"

@@ -22,6 +22,7 @@ _MAX_DEPTH = 4
 _MAX_ITEMS = 100
 _MAX_STRING = 4_000
 _MAX_JSON_BYTES = 65_536
+_MAX_IMAGE_DIMS = 16
 _MISSING = object()
 
 
@@ -262,30 +263,36 @@ def _dataset_dimension_summary(image: Any, dimensions: int) -> dict[str, int] | 
         "time": "frames",
         "t": "frames",
     }
-    found_axis_metadata = False
+    try:
+        axis_method = getattr(image, "axis", None)
+    except Exception:
+        return None
+    if not callable(axis_method):
+        for index, field in enumerate(
+            ("width", "height", "channels", "slices", "frames")
+        ):
+            if index >= dimensions:
+                break
+            size = _integer_from_method(image, "dimension", index)
+            if size is None:
+                return None
+            values[field] = size
+        return values
+
+    recognized: set[str] = set()
     for index in range(dimensions):
         axis = _call_named(image, "axis", index)
         if axis is _MISSING:
-            continue
+            return None
         field = axis_fields.get(_axis_label(axis) or "")
         if field is None:
             continue
         size = _integer_from_method(image, "dimension", index)
-        if size is not None:
-            values[field] = size
-            found_axis_metadata = True
-
-    if found_axis_metadata:
-        return values
-
-    for index, field in enumerate(("width", "height", "channels", "slices", "frames")):
-        if index >= dimensions:
-            break
-        size = _integer_from_method(image, "dimension", index)
         if size is None:
             return None
         values[field] = size
-    return values
+        recognized.add(field)
+    return values if {"width", "height"}.issubset(recognized) else None
 
 
 def _dataset_summary(image: Any, java_type: str | None) -> dict[str, Any] | None:
@@ -294,7 +301,12 @@ def _dataset_summary(image: Any, java_type: str | None) -> dict[str, Any] | None
     title = _text_from_method(image, "getName")
     dimensions = _integer_from_method(image, "numDimensions")
     bit_depth = _integer_from_method(image, "getValidBits")
-    if title is None or dimensions is None or bit_depth is None or dimensions < 0:
+    if (
+        title is None
+        or dimensions is None
+        or bit_depth is None
+        or not 0 <= dimensions <= _MAX_IMAGE_DIMS
+    ):
         return None
     values = _dataset_dimension_summary(image, dimensions)
     if values is None:
@@ -449,47 +461,37 @@ def _pair_from_entry(entry: Any) -> tuple[Any, Any] | None:
     return (key, item) if key is not _MISSING and item is not _MISSING else None
 
 
-def _bounded_java_pairs(value: Any) -> _BoundedItems | None:
-    entry_set = _call_named(value, "entrySet")
-    if entry_set is _MISSING:
+def _bounded_pair(entry: Any) -> tuple[Any, Any] | None:
+    """Accept exactly two entry values after at most three reads."""
+    named_pair = _pair_from_entry(entry)
+    if named_pair is not None:
+        return named_pair
+    try:
+        iterator = iter(entry)
+        key = next(iterator)
+        item = next(iterator)
+    except Exception:
         return None
-    bounded = _bounded_items(entry_set)
-    if bounded is None:
+    try:
+        next(iterator)
+    except StopIteration:
+        return key, item
+    except Exception:
         return None
-    pairs = [_pair_from_entry(entry) for entry in bounded.items]
-    if any(pair is None for pair in pairs):
-        return None
-    probe = (
-        _pair_from_entry(bounded.probe) if bounded.probe is not _MISSING else _MISSING
-    )
-    return _BoundedItems(
-        [pair for pair in pairs if pair is not None],
-        exact_omitted=bounded.exact_omitted,
-        at_least_omitted=bounded.at_least_omitted,
-        probe=probe,
-    )
+    return None
 
 
-def _mapping_pairs(value: Any) -> _BoundedItems | None:
-    if type(value) is dict:
-        return _bounded_exact_mapping(value)
-    bounded = _bounded_python_iterable(_call_named(value, "items"))
-    if bounded is None:
-        return None
+def _parsed_bounded_pairs(bounded: _BoundedItems) -> _BoundedItems | None:
     pairs: list[tuple[Any, Any]] = []
-    for pair in bounded.items:
-        try:
-            key, item = pair
-        except Exception:
+    for entry in bounded.items:
+        pair = _bounded_pair(entry)
+        if pair is None:
             return None
-        pairs.append((key, item))
+        pairs.append(pair)
     probe: Any = _MISSING
     if bounded.probe is not _MISSING:
-        try:
-            probe = tuple(bounded.probe)
-            if len(probe) != 2:
-                return None
-        except Exception:
+        probe = _bounded_pair(bounded.probe)
+        if probe is None:
             return None
     return _BoundedItems(
         pairs,
@@ -497,6 +499,21 @@ def _mapping_pairs(value: Any) -> _BoundedItems | None:
         at_least_omitted=bounded.at_least_omitted,
         probe=probe,
     )
+
+
+def _bounded_java_pairs(value: Any) -> _BoundedItems | None:
+    entry_set = _call_named(value, "entrySet")
+    if entry_set is _MISSING:
+        return None
+    bounded = _bounded_items(entry_set)
+    return _parsed_bounded_pairs(bounded) if bounded is not None else None
+
+
+def _mapping_pairs(value: Any) -> _BoundedItems | None:
+    if type(value) is dict:
+        return _parsed_bounded_pairs(_bounded_exact_mapping(value))
+    bounded = _bounded_python_iterable(_call_named(value, "items"))
+    return _parsed_bounded_pairs(bounded) if bounded is not None else None
 
 
 def _object_map_keys(bounded: _BoundedItems) -> list[str] | None:
