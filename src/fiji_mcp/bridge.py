@@ -451,9 +451,12 @@ def _bounded_items(value: Any) -> _BoundedItems | None:
 
 
 def _string_map_key(value: Any) -> str | None:
-    if isinstance(value, str):
+    if type(value) is str:
         return _truncate_string(value)
-    unboxed = _unbox_java_primitive(value, _java_type_name(value))
+    java_type = _java_type_name(value)
+    if java_type != "java.lang.String":
+        return None
+    unboxed = _unbox_java_primitive(value, java_type)
     return unboxed if isinstance(unboxed, str) else None
 
 
@@ -715,7 +718,6 @@ def _oversized_fallback(value: Any) -> dict[str, Any]:
         "truncated": True,
         "reason": "serialized result exceeds 64 KiB",
         "java_type": _resolved_type_name(value),
-        "summary": _summary(value),
     }
     encoded = _encoded_json(fallback)
     if encoded is not None and len(encoded) <= _MAX_JSON_BYTES:

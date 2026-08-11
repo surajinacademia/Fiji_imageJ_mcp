@@ -64,6 +64,17 @@ class _JavaString:
         return self._value
 
 
+class _JavaCharacter:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def charValue(self) -> str:
+        return self._value
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.lang.Character")
+
+
 class _MapEntry:
     def __init__(self, key: object, value: object) -> None:
         self._key = key
@@ -172,6 +183,45 @@ class _GuardedInfiniteJavaMap:
         self._iterator = _GuardedInfiniteJavaIterator(_MapEntry("key", "value"))
 
     def entrySet(self) -> _GuardedInfiniteJavaMap:
+        return self
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.util.LinkedHashMap")
+
+    def iterator(self) -> _GuardedInfiniteJavaIterator:
+        return self._iterator
+
+
+class _NoStringification:
+    def __init__(self) -> None:
+        self.string_calls = 0
+
+    def __str__(self) -> str:
+        self.string_calls += 1
+        raise AssertionError("serializer must not stringify an oversized container")
+
+    def toString(self) -> str:
+        return str(self)
+
+
+class _OversizedJavaCollection(_NoStringification):
+    def __init__(self) -> None:
+        super().__init__()
+        self._iterator = _GuardedInfiniteJavaIterator("x" * 4_000)
+
+    def getClass(self) -> _JavaClass:
+        return _JavaClass("java.util.ArrayList")
+
+    def iterator(self) -> _GuardedInfiniteJavaIterator:
+        return self._iterator
+
+
+class _OversizedJavaMap(_NoStringification):
+    def __init__(self) -> None:
+        super().__init__()
+        self._iterator = _GuardedInfiniteJavaIterator(_MapEntry("key", "x" * 4_000))
+
+    def entrySet(self) -> _OversizedJavaMap:
         return self
 
     def getClass(self) -> _JavaClass:
@@ -495,11 +545,35 @@ def test_collections_and_strings_are_truncated():
     assert len(result["text"]) == 4000
 
 
-def test_oversized_payload_falls_back_to_summary():
+def test_oversized_payload_falls_back_to_metadata():
     result = to_jsonable({str(index): "x" * 4000 for index in range(100)})
     assert result["truncated"] is True
     assert result["reason"] == "serialized result exceeds 64 KiB"
     assert len(json.dumps(result).encode("utf-8")) <= 65_536
+
+
+@pytest.mark.parametrize(
+    ("container_factory", "java_type"),
+    [
+        (_OversizedJavaCollection, "java.util.ArrayList"),
+        (_OversizedJavaMap, "java.util.LinkedHashMap"),
+    ],
+)
+def test_oversized_java_containers_do_not_stringify_after_sampling(
+    container_factory, java_type: str
+):
+    value = container_factory()
+
+    result = to_jsonable(value)
+
+    assert value._iterator.next_calls == 101
+    assert value.string_calls == 0
+    assert result == {
+        "truncated": True,
+        "reason": "serialized result exceeds 64 KiB",
+        "java_type": java_type,
+    }
+    assert len(json.dumps(result, ensure_ascii=False).encode("utf-8")) <= 65_536
 
 
 def test_maximum_depth_is_explicit():
@@ -528,6 +602,35 @@ def test_java_map_uses_ordered_entries_when_any_key_is_not_a_string():
             {"key": 1, "value": "one"},
             {"key": "1", "value": "string one"},
         ]
+    }
+
+
+def test_java_character_key_uses_ordered_entries():
+    assert to_jsonable(_JavaMap([_MapEntry(_JavaCharacter("x"), "character")])) == {
+        "map_entries": [{"key": "x", "value": "character"}]
+    }
+
+
+def test_java_character_key_forces_ordered_entries_with_same_java_string_key():
+    result = to_jsonable(
+        _JavaMap(
+            [
+                _MapEntry(_JavaCharacter("x"), "character"),
+                _MapEntry(_JavaString("x"), "string"),
+            ]
+        )
+    )
+    assert result == {
+        "map_entries": [
+            {"key": "x", "value": "character"},
+            {"key": "x", "value": "string"},
+        ]
+    }
+
+
+def test_java_string_key_remains_a_json_object_key():
+    assert to_jsonable(_JavaMap([_MapEntry(_JavaString("x"), "string")])) == {
+        "x": "string"
     }
 
 
