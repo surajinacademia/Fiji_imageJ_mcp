@@ -978,7 +978,14 @@ Use these concrete rules:
 - `get_state` reads `ij.getVersion()`, `ij.WindowManager.getCurrentImage()`, `getIDList()`, and the live Results table in one `run_read` call. Include an active temp image in the summary even when headless `getIDList()` is empty.
 - `get_state` returns exactly `lifecycle`, `version`, `mode`, `active_image`, `open_images`, and `results`; `results` contains `columns` and `total_rows`. Deduplicate the active image by ImageJ ID when it is already in the window list and append an unlisted headless temp image once.
 - `open_image` resolves and checks the input file before `run_mutation`; its dispatch callback calls `ij.IJ.openImage` exactly once, then uses `WindowManager.setTempCurrentImage` in headless mode or `image.show()` in GUI mode.
-- `save_image` uses the prepare callback to require an active image and a filename suffix, creates parents immediately before dispatch, calls the extension-inferring ImageJ `IJ.save(image, path)` overload exactly once, and returns the normalized suffix without a leading dot.
+- `save_image` preserves the exact requested path and accepts only these exact
+  lowercase suffixes: `.tif`, `.tiff`, `.jpg`, `.png`, `.gif`, `.bmp`, `.fits`,
+  `.pgm`, `.zip`, `.raw`, and `.avi`. It rejects `.jpeg` and case variants
+  because ImageJ rewrites those filename spellings. Its prepare callback
+  requires an active image, creates parents immediately before dispatch, and
+  rejects an existing exact output path (no overwrite). It calls ImageJ
+  `IJ.save(image, path)` exactly once with the exact requested path and returns
+  that suffix without a leading dot as `format`.
 - `_read_results` obtains original headings by ImageJ column index. It returns `columns`, paged `rows` arrays, `offset`, `returned`, and `total_rows`. Missing cells are `None`; finite values remain numbers; NaN and infinities use the approved strings.
 - Validate `offset >= 0` and `1 <= limit <= 5_000` before acquiring Fiji.
 - Raise `FijiError` with `Outcome.FAILED` for missing files, missing active image, empty/invalid paths, and invalid pagination so the mutation wrapper does not change these deterministic failures to unknown.

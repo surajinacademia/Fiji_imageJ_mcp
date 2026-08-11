@@ -66,10 +66,14 @@ registered command or script for formats that need an installed importer.
 
 ## `save_image(path: str)`
 
-Saves the current image to a local filename. The filename extension selects the
-format; parent directories are created. Supported suffixes are TIFF, PNG, JPEG,
-GIF, BMP, FITS, PGM, ZIP, RAW, and AVI variants accepted by Fiji. Returns the
-resolved `path`, canonical `format`, and `image` metadata summary.
+Saves the current image to the exact requested local filename. Parent
+directories are created. Only these exact lowercase suffixes are supported:
+`.tif`, `.tiff`, `.jpg`, `.png`, `.gif`, `.bmp`, `.fits`, `.pgm`, `.zip`,
+`.raw`, and `.avi`. `.jpeg` and case variants are rejected because ImageJ
+rewrites those filename spellings. An existing exact output path is also
+rejected: `save_image` never overwrites a file. Returns the exact resolved
+`path`, the extension without its leading dot as `format`, and `image` metadata
+summary.
 
 ## `get_results(offset: int = 0, limit: int = 500)`
 

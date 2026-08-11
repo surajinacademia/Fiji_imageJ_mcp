@@ -464,36 +464,110 @@ def test_open_image_null_result_is_definite_failure_after_one_dispatch(
     assert raised.value.outcome is Outcome.FAILED
 
 
-def test_save_image_infers_format_from_suffix(monkeypatch, tmp_path):
-    output = tmp_path / "nested" / "result.PNG"
+@pytest.mark.parametrize(
+    ("suffix", "image_format"),
+    [
+        (".tif", "tif"),
+        (".tiff", "tiff"),
+        (".jpg", "jpg"),
+        (".png", "png"),
+        (".gif", "gif"),
+        (".bmp", "bmp"),
+        (".fits", "fits"),
+        (".pgm", "pgm"),
+        (".zip", "zip"),
+        (".raw", "raw"),
+        (".avi", "avi"),
+    ],
+)
+def test_save_image_preserves_exact_lowercase_suffix(
+    monkeypatch, tmp_path, suffix, image_format
+):
+    output = tmp_path / "nested" / f"result{suffix}"
     fake_ij = FakeIJ(active=FakeImage("active", 4, 4))
     monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
 
     result = minimal.save_image(str(output))
 
-    canonical_output = output.with_suffix(".png").resolve()
-    assert result["path"] == str(canonical_output)
-    assert result["format"] == "png"
+    requested_path = output.resolve()
+    assert result["path"] == str(requested_path)
+    assert result["format"] == image_format
     assert result["image"]["title"] == "active"
     assert fake_ij.save_count == 1
-    assert fake_ij.saved_path == str(canonical_output)
+    assert fake_ij.saved_path == str(requested_path)
     assert fake_ij.parent_exists_when_saved is True
-    assert canonical_output.is_file()
+    assert requested_path.is_file()
 
 
-def test_save_image_canonicalizes_jpeg_alias_before_dispatch(monkeypatch, tmp_path):
-    output = tmp_path / "nested" / "result.JPEG"
+def test_save_image_preserves_tiff_when_tif_sibling_exists(monkeypatch, tmp_path):
+    output = tmp_path / "nested" / "result.tiff"
+    tif_sibling = output.with_suffix(".tif")
+    tif_sibling.parent.mkdir()
+    tif_sibling.write_bytes(b"original tif")
     fake_ij = FakeIJ(active=FakeImage("active", 4, 4))
     monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
 
     result = minimal.save_image(str(output))
 
-    canonical_output = output.with_suffix(".jpg").resolve()
-    assert result["path"] == str(canonical_output)
-    assert result["format"] == "jpg"
+    requested_path = output.resolve()
+    assert result["path"] == str(requested_path)
+    assert result["format"] == "tiff"
     assert fake_ij.save_count == 1
-    assert fake_ij.saved_path == str(canonical_output)
-    assert canonical_output.is_file()
+    assert fake_ij.saved_path == str(requested_path)
+    assert requested_path.is_file()
+    assert tif_sibling.read_bytes() == b"original tif"
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        ".jpeg",
+        ".JPEG",
+        ".TIF",
+        ".tIfF",
+        ".JpG",
+        ".PnG",
+        ".GiF",
+        ".BmP",
+        ".FiTs",
+        ".PgM",
+        ".ZiP",
+        ".RaW",
+        ".AvI",
+    ],
+)
+def test_save_image_rejects_nonexact_suffix_before_dispatch(
+    monkeypatch, tmp_path, suffix
+):
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("called")),
+    )
+
+    with pytest.raises(FijiError, match="Unsupported image extension") as raised:
+        minimal.save_image(str(tmp_path / f"result{suffix}"))
+
+    assert raised.value.code == "unsupported_format"
+    assert raised.value.outcome is Outcome.FAILED
+
+
+def test_save_image_rejects_jpeg_without_touching_jpg_sibling(monkeypatch, tmp_path):
+    output = tmp_path / "result.jpeg"
+    jpg_sibling = output.with_suffix(".jpg")
+    jpg_sibling.write_bytes(b"original jpg")
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("called")),
+    )
+
+    with pytest.raises(FijiError, match="Unsupported image extension") as raised:
+        minimal.save_image(str(output))
+
+    assert raised.value.code == "unsupported_format"
+    assert raised.value.outcome is Outcome.FAILED
+    assert jpg_sibling.read_bytes() == b"original jpg"
 
 
 def test_save_image_rejects_unsupported_suffix_before_dispatch(monkeypatch, tmp_path):
@@ -522,6 +596,26 @@ def test_save_image_rejects_existing_directory_before_dispatch(monkeypatch, tmp_
         minimal.save_image(str(output))
 
     assert raised.value.outcome is Outcome.FAILED
+
+
+def test_save_image_rejects_existing_exact_output_in_prepare_under_lock(
+    monkeypatch, tmp_path
+):
+    output = tmp_path / "result.tiff"
+    output.write_bytes(b"original tiff")
+    fake_ij = FakeIJ(active=FakeImage("active", 4, 4))
+    bridge._reset_runtime_for_tests(ready_ij=fake_ij)
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    try:
+        with pytest.raises(FijiError, match="already exists") as raised:
+            minimal.save_image(str(output))
+    finally:
+        bridge._reset_runtime_for_tests()
+
+    assert raised.value.code == "output_exists"
+    assert raised.value.outcome is Outcome.FAILED
+    assert fake_ij.save_count == 0
+    assert output.read_bytes() == b"original tiff"
 
 
 def test_save_image_clears_stale_imagej_error_before_dispatch(monkeypatch, tmp_path):

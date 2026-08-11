@@ -85,8 +85,14 @@ def test_minimal_fiji_end_to_end(tmp_path: Path) -> None:
     assert compared.structured_content["dimensions_match"] is True
     assert compared.structured_content["changed_pixel_fraction"] > 0
 
-    saved = tools.save_image(str(tmp_path / "result.tif"))
-    assert Path(saved["path"]).is_file()
+    save_path = tmp_path / "result.tiff"
+    tif_sibling = tmp_path / "result.tif"
+    tif_sibling.write_bytes(b"preserve .tif sibling")
+    saved = tools.save_image(str(save_path))
+    assert saved["path"] == str(save_path.resolve())
+    assert saved["format"] == "tiff"
+    assert save_path.is_file()
+    assert tif_sibling.read_bytes() == b"preserve .tif sibling"
 
 
 _SYNTHETIC_IMAGE_SCRIPT = """
