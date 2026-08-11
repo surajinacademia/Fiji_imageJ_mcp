@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -189,3 +191,60 @@ def test_publish_workflow_rejects_extra_install_command() -> None:
 
     with pytest.raises(AssertionError):
         _assert_release_workflow_security(workflow)
+
+
+def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
+    readme = Path("README.md").read_text()
+    json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    toml_config = readme.split("```toml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    tool_section = readme.split("## The nine tools\n", maxsplit=1)[1].split(
+        "\n## ", maxsplit=1
+    )[0]
+    documented_tools = re.findall(r"^\| `([^`]+)` \|", tool_section, re.MULTILINE)
+
+    assert "This README documents v0.2.0" in readme
+    assert 'python -m pip install "fiji-mcp-server==0.2.0"' in readme
+    assert "codex mcp add fiji" in readme
+    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
+        "fiji-mcp-server"
+    )
+    assert tomllib.loads(toml_config)["mcp_servers"]["fiji"]["env"] == {
+        "FIJI_PATH": "/Applications/Fiji",
+        "FIJI_MODE": "headless",
+    }
+    assert documented_tools == [
+        "get_state",
+        "search_commands",
+        "run_command",
+        "run_script",
+        "open_image",
+        "save_image",
+        "get_results",
+        "screenshot",
+        "compare_screenshots",
+    ]
+    assert readme.count("> **Prompt:**") >= 5
+    assert "fiji-mcp-install" not in readme
+    assert "trusted arbitrary local code" in readme
+    assert "The MCP client owns the stdio process" in readme
+    assert "python -m pip install ." in readme
+    assert "`save_image` is strict" in readme
+    assert (
+        "`screenshot` and `compare_screenshots` overwrite an existing `save_path`"
+        in readme
+    )
+    assert (
+        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/docs/tools.md"
+        in readme
+    )
+    assert (
+        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE" in readme
+    )
+    assert (
+        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md"
+        in readme
+    )
+    assert (
+        "https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/"
+        in readme
+    )

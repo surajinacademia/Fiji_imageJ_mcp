@@ -1,30 +1,81 @@
 # Fiji MCP Server
 
-Fiji MCP Server is a minimal stdio MCP server that lets an AI client control a
-local Fiji/ImageJ instance through commands, IJM, Groovy, images, Results, and
-screenshots.
+[![PyPI version](https://img.shields.io/pypi/v/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
+[![Python versions](https://img.shields.io/pypi/pyversions/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
+[![License](https://img.shields.io/pypi/l/fiji-mcp-server.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE)
 
-## Install
+**Give your AI assistant hands inside Fiji/ImageJ.** Fiji MCP Server is a small
+stdio [Model Context Protocol](https://modelcontextprotocol.io/) bridge that can
+open and save images, discover and run installed commands, execute IJM or
+Groovy, read Results, and verify changes with screenshots.
+
+This README documents v0.2.0. The public surface is deliberately limited to
+nine tools; Fiji's live command registries and scripting APIs provide the
+plugin reach without a large custom framework.
+
+## Quick start
+
+You need Python 3.10 or newer and a local
+[Fiji](https://fiji.sc/) installation.
+
+1. Install the server:
+
+   ```bash
+   python -m pip install "fiji-mcp-server==0.2.0"
+   ```
+
+   Before v0.2.0 is published on PyPI, install from a source checkout instead:
+
+   ```bash
+   python -m pip install .
+   ```
+
+2. Locate the Fiji root directory. It must directly contain `jars/` and
+   `plugins/`; on this Mac, for example, it is `/Applications/Fiji`.
+
+3. Configure your MCP client with `FIJI_PATH` and `FIJI_MODE=headless`; see
+   the client-specific instructions below. The MCP client owns the stdio process
+   and starts `fiji-mcp-server` when needed.
+
+Fiji starts lazily on the first Fiji-backed tool call. The bridge prefers one
+compatible JVM bundled inside the selected Fiji installation.
+
+## Connect Codex
+
+The official Codex CLI, IDE extension, and ChatGPT desktop app share MCP
+configuration on the same Codex host. Add this stdio server from a terminal:
 
 ```bash
-pip install fiji-mcp-server
+codex mcp add fiji \
+  --env FIJI_PATH=/Applications/Fiji \
+  --env FIJI_MODE=headless \
+  -- fiji-mcp-server
+codex mcp list
 ```
 
-Install [Fiji](https://fiji.sc/) locally and set `FIJI_PATH` to its root
-directory, which must contain `jars/` and `plugins/`. The server defaults to
-headless Fiji; `FIJI_MODE=gui` is an explicit optional override.
+Or add the equivalent entry to `~/.codex/config.toml` (or a trusted project's
+`.codex/config.toml`):
 
-Before Fiji starts, the bridge prefers exactly one valid JVM bundled for the
-current platform under `FIJI_PATH/java/`. An already configured SciJava JVM is
-left alone, and installations without one matching bundled JVM fall back to
-SciJava's normal JVM selection. Multiple matching bundled JVMs produce a setup
-error rather than an arbitrary choice.
+```toml
+[mcp_servers.fiji]
+command = "fiji-mcp-server"
+startup_timeout_sec = 120
+tool_timeout_sec = 300
 
-## Configure an MCP client
+[mcp_servers.fiji.env]
+FIJI_PATH = "/Applications/Fiji"
+FIJI_MODE = "headless"
+```
 
-Add a generic stdio server entry to your MCP client's configuration, replacing
-the Fiji path with your local installation. `FIJI_MODE` is optional and shown
-here with its default value.
+In ChatGPT desktop, you can also open **Settings → MCP servers → Add server**,
+choose **STDIO**, and then restart after saving. See the
+[official Codex MCP documentation](https://developers.openai.com/codex/mcp/)
+for current client controls.
+
+## Other JSON-based MCP clients
+
+Many local MCP clients use this common JSON shape. Their configuration-file
+location and restart control are client-specific:
 
 ```json
 {
@@ -40,60 +91,103 @@ here with its default value.
 }
 ```
 
-## Nine MCP tools
+If the client cannot find `fiji-mcp-server`, replace `command` with the full
+path reported by `which fiji-mcp-server` (macOS/Linux) or
+`where fiji-mcp-server` (Windows).
+
+## Try these prompts
+
+> **Prompt:** Open `/data/cells.tif`, inspect its dimensions and current C/Z/T
+> position, and show me an active-image screenshot.
+
+> **Prompt:** Search the installed Fiji commands for “Gaussian Blur”. Show the
+> best matching command's invocation route and accepted inputs, then run it with
+> sigma 2 only if that parameter is supported.
+
+> **Prompt:** Run an ImageJ macro that thresholds the active image and measures
+> it, then return the Results table in pages of 200 rows.
+
+> **Prompt:** Save a screenshot to `/tmp/before.png`, apply the chosen threshold,
+> save `/tmp/after.png`, and compare them. If the expected change is absent,
+> inspect state and logs before adjusting the threshold once; do not blindly
+> repeat a mutation whose outcome is unknown.
+
+> **Prompt:** Use Groovy to call an installed scriptable plugin that is not
+> representable as a structured command, then summarize its bounded result and
+> the active-image state.
+
+> **Prompt:** Save the active image as `/data/output/processed.tiff`. Do not
+> overwrite an existing file, and report the exact path Fiji created.
+
+## What can it do?
+
+- **Inspect and move data:** read live state, open a local image, save the active
+  image, and page through the Results table.
+- **Use installed commands:** search Fiji's SciJava and ImageJ1 registries, then
+  invoke a selected command through structured parameters or legacy options
+  when that route is supported.
+- **Reach scriptable plugins:** use trusted IJM or Groovy for ROIs, unusual Java
+  inputs, and installed plugins that do not fit the registered command route.
+- **Verify visually:** render the active plane or Results table, save before and
+  after PNGs, and compare dimensions and same-size pixel metrics.
+
+The server does not install plugins, click dialogs, drive menus, or promise
+structured parameters for every plugin.
+
+## The nine tools
 
 | Tool | Purpose |
 | --- | --- |
-| `get_state` | Read live Fiji, image, and Results-table state. |
-| `search_commands` | Find registered SciJava and ImageJ1 commands. |
-| `run_command` | Invoke one registered command with supported parameters. |
-| `run_script` | Run one IJM or Groovy script. |
-| `open_image` | Open and activate a local image. |
-| `save_image` | Save the active image to a local path. |
-| `get_results` | Read a paginated, ordered page of the Results table. |
-| `screenshot` | Render the active image or Results table as PNG. |
-| `compare_screenshots` | Compare two saved screenshot paths numerically and visually. |
+| `get_state` | Read Fiji lifecycle, active/open images, and Results-table state. |
+| `search_commands` | Search registered SciJava and ImageJ1 commands and inspect their routes. |
+| `run_command` | Run one resolved installed command with supported parameters or options. |
+| `run_script` | Run one trusted IJM or Groovy script. |
+| `open_image` | Open an existing local image and make it current. |
+| `save_image` | Save the active image to a new exact lowercase supported path. |
+| `get_results` | Read an ordered, paginated page from Fiji's live Results table. |
+| `screenshot` | Return and optionally save a PNG of the active plane or Results. |
+| `compare_screenshots` | Compare two saved raster paths visually and, when sizes match, numerically. |
 
-## Example prompts
+See the [complete nine-tool reference](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/docs/tools.md) for
+signatures, return fields, limits, and failure behavior.
 
-1. “Open `/data/cells.tif`, save an active-image screenshot to
-   `/tmp/cells-before.png`, apply a Gaussian blur, save
-   `/tmp/cells-after.png`, compare the two screenshots, and save the processed
-   image as `/data/out/cells-blurred.tif`.”
-2. “Search the installed Fiji commands for particle analysis, show the accepted
-   parameters for the best match, then run it on the active image and report
-   the returned outputs.”
-3. “Open `/data/objects.tif`, measure the objects with an IJM script, and
-   return the Results table in pages of 200 rows.”
+## How it works
 
-## Trusted local execution and limitations
+```text
+AI client ── stdio JSON-RPC ──▶ FastMCP ── serialized bridge ──▶ PyImageJ ──▶ Fiji + installed plugins
+```
 
-`run_script` executes trusted arbitrary local IJM or Groovy code. It can read
-or modify files available to the MCP process, so do not expose this server to
-untrusted clients. Python diagnostics and ordinary Java output are redirected
-to stderr so stdout remains MCP JSON-RPC; deliberately writing to native file
-descriptor 1 can bypass Java stream redirection and is not a sandbox boundary.
+Fiji operations share one process-wide lock. Read-only operations receive at
+most one retry for a small allowlist of transient failures. Commands, scripts,
+image opens, and saves are never automatically repeated after dispatch.
 
-The server discovers and runs already-installed commands, and IJM/Groovy can
-reach installed plugins that are scriptable. It does not install plugins or
-automate dialogs, menus, mouse input, or keyboard input. Plugins that require a
-GUI or cannot accept scripted parameters may fail in headless mode; use a
-scriptable route when available or restart with `FIJI_MODE=gui`.
+## Safety and limitations
 
-Fiji calls are serialized. Read-only operations receive at most one retry for
-explicitly allowlisted transient failures; image opening/saving, command
-execution, and script execution are never retried automatically after they are
-dispatched. If a mutation's result is unknown, inspect `get_state` or capture a
-`screenshot` before choosing whether to repeat it.
+`run_script` executes **trusted arbitrary local code**. IJM and Groovy can read
+or modify anything available to the MCP process, so run this server only for a
+trusted local client. It is not a remote multi-user service or a sandbox.
 
-For visual verification, save a `screenshot` before an operation and another
-after it, then pass those two saved paths to `compare_screenshots`. The
-comparison is stateless and reports image dimensions, a visual comparison, and
-same-size pixel metrics. Use `get_results(offset, limit)` for full tabular data:
-it preserves ImageJ column and row order, while a Results screenshot renders at
-most the first 100 rows.
+Python diagnostics and ordinary Java output are redirected to stderr to protect
+stdio JSON-RPC. Plugins that require GUI dialogs, mouse/keyboard automation, or
+unscriptable interaction may fail in headless mode. Use `FIJI_MODE=gui` only for
+an intentional local desktop workflow supported by that plugin.
 
-## Learn more
+`save_image` is strict: its requested suffix must be one of the exact lowercase
+formats documented in the tool reference, and an existing output is rejected.
+`screenshot` and `compare_screenshots` overwrite an existing `save_path`; use
+a new path when preserving an existing PNG is required. After any mutation with
+an unknown outcome, inspect state or take a screenshot before deciding whether
+to retry.
 
-See the [nine-tool reference](docs/tools.md) for signatures and return fields,
-and [historical release notes](docs/releases/) for prior releases.
+## Project links and acknowledgments
+
+- [Fiji](https://fiji.sc/) and [ImageJ](https://imagej.net/)
+- [PyImageJ](https://github.com/imagej/pyimagej)
+- [FastMCP](https://gofastmcp.com/)
+- README-structure inspiration: [Cellpose MCP](https://github.com/surajinacademia/cellpose_mcp)
+- Related minimal viewer bridge: [napari-mcp](https://github.com/royerlab/napari-mcp)
+- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md) and [historical release notes](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/)
+
+## License
+
+BSD-3-Clause. See [LICENSE](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE).
