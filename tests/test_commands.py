@@ -608,6 +608,33 @@ def test_ambiguous_same_class_actions_list_each_name_class_pair():
     assert "delegate class" not in raised.value.recovery
 
 
+def test_ambiguous_same_class_identical_names_require_script_fallback():
+    candidates = minimal._deduplicate_commands(
+        [
+            {
+                "name": "Smooth",
+                "class_name": "ij.plugin.filter.Filters",
+                "family": "scijava",
+            },
+            {
+                "name": "Smooth",
+                "class_name": "ij.plugin.filter.Filters",
+                "family": "imagej1",
+                "_legacy_descriptor": 'ij.plugin.filter.Filters("smooth")',
+            },
+        ]
+    )
+
+    with pytest.raises(FijiError) as raised:
+        minimal._resolve_command(candidates, "Smooth")
+
+    assert (
+        raised.value.recovery == "Use run_script with IJM or Groovy for this command."
+    )
+    assert "display name" not in raised.value.recovery
+    assert "delegate class" not in raised.value.recovery
+
+
 def test_missing_command_is_deterministic():
     with pytest.raises(FijiError) as raised:
         minimal._resolve_command(COMMANDS, "does not exist")

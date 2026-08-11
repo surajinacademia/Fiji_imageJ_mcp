@@ -593,10 +593,13 @@ def _ambiguous_command(name: str, candidates: list[dict[str, Any]]) -> FijiError
     delegate_classes = {
         _command_text(command.get("class_name")) for command in candidates
     }
+    display_names = [_command_text(command.get("name")) for command in candidates]
     recovery = "Use an exact delegate class from search_commands and retry."
     if len(delegate_classes) == 1:
         recovery = (
             "Use an exact case-sensitive display name from search_commands and retry."
+            if all(display_names) and len(set(display_names)) == len(display_names)
+            else "Use run_script with IJM or Groovy for this command."
         )
     return _failed(
         "ambiguous_command",
