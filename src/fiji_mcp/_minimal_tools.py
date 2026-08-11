@@ -17,6 +17,21 @@ from fiji_mcp.bridge import (
     to_jsonable,
 )
 
+_SAVE_SUFFIXES = {
+    ".tif": ".tif",
+    ".tiff": ".tif",
+    ".png": ".png",
+    ".jpg": ".jpg",
+    ".jpeg": ".jpg",
+    ".gif": ".gif",
+    ".bmp": ".bmp",
+    ".fits": ".fits",
+    ".pgm": ".pgm",
+    ".zip": ".zip",
+    ".raw": ".raw",
+    ".avi": ".avi",
+}
+
 
 def _failed(code: str, message: str, recovery: str) -> FijiError:
     return FijiError(
@@ -25,6 +40,16 @@ def _failed(code: str, message: str, recovery: str) -> FijiError:
         retryable=False,
         outcome=Outcome.FAILED,
         recovery=recovery,
+    )
+
+
+def _save_failed(message: str) -> FijiError:
+    return FijiError(
+        "save_failed",
+        message,
+        retryable=False,
+        outcome=Outcome.UNKNOWN,
+        recovery="Inspect the output path before retrying.",
     )
 
 
@@ -220,14 +245,38 @@ def open_image(path: str) -> dict[str, Any]:
 
 def save_image(path: str) -> dict[str, Any]:
     """Save Fiji's active image using the filename's extension."""
-    image_path = _resolve_path(path)
-    image_format = image_path.suffix.removeprefix(".").lower()
-    if not image_format:
+    requested_path = _resolve_path(path)
+    requested_suffix = requested_path.suffix.lower()
+    if not requested_suffix:
         raise _failed(
             "invalid_path",
             "save_image requires a filename extension.",
             "Add an output filename extension such as .tif or .png and retry.",
         )
+    canonical_suffix = _SAVE_SUFFIXES.get(requested_suffix)
+    if canonical_suffix is None:
+        raise _failed(
+            "unsupported_format",
+            f"Unsupported image extension: {requested_path.suffix}",
+            "Use a supported image extension and retry.",
+        )
+    effective_path = requested_path.with_suffix(canonical_suffix)
+    for target_path in (requested_path, effective_path):
+        try:
+            is_directory = target_path.is_dir()
+        except OSError as error:
+            raise _failed(
+                "invalid_path",
+                f"Could not check output path: {error}",
+                "Choose a writable output path and retry.",
+            ) from error
+        if is_directory:
+            raise _failed(
+                "invalid_path",
+                f"Output path is a directory: {target_path}",
+                "Choose an output filename instead and retry.",
+            )
+    image_format = canonical_suffix.removeprefix(".")
 
     def prepare(ij: Any) -> Any:
         image = ij.WindowManager.getCurrentImage()
@@ -238,7 +287,7 @@ def save_image(path: str) -> dict[str, Any]:
                 "Open or select an image, then retry.",
             )
         try:
-            image_path.parent.mkdir(parents=True, exist_ok=True)
+            effective_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as error:
             raise _failed(
                 "invalid_path",
@@ -248,9 +297,21 @@ def save_image(path: str) -> dict[str, Any]:
         return image
 
     def dispatch(ij: Any, image: Any) -> dict[str, Any]:
-        ij.IJ.save(image, str(image_path))
+        ij.IJ.getErrorMessage()
+        ij.IJ.save(image, str(effective_path))
+        error_message = ij.IJ.getErrorMessage()
+        if error_message:
+            raise _save_failed(f"Fiji could not save image: {error_message}")
+        try:
+            saved = effective_path.is_file()
+        except OSError as error:
+            raise _save_failed(f"Could not verify saved image: {error}") from error
+        if not saved:
+            raise _save_failed(
+                f"Fiji did not create the requested image: {effective_path}"
+            )
         return {
-            "path": str(image_path),
+            "path": str(effective_path),
             "format": image_format,
             "image": image_summary(image),
         }

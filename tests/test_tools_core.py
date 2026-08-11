@@ -120,6 +120,8 @@ class FakeIJ:
         open_images: list[FakeImage] | None = None,
         opened: FakeImage | None = None,
         results: FakeResultsTable | None = None,
+        error_messages: list[str | None] | None = None,
+        write_saved_file: bool = True,
     ) -> None:
         self._version = version
         self.WindowManager = FakeWindowManager(active, open_images or [])
@@ -130,6 +132,9 @@ class FakeIJ:
         self.save_count = 0
         self.saved_path: str | None = None
         self.parent_exists_when_saved = False
+        self._error_messages = error_messages or []
+        self.error_message_calls = 0
+        self.write_saved_file = write_saved_file
 
     def getVersion(self) -> str:
         return self._version
@@ -142,6 +147,12 @@ class FakeIJ:
         self.save_count += 1
         self.saved_path = path
         self.parent_exists_when_saved = Path(path).parent.is_dir()
+        if self.write_saved_file:
+            Path(path).write_bytes(b"saved")
+
+    def getErrorMessage(self) -> str | None:
+        self.error_message_calls += 1
+        return self._error_messages.pop(0) if self._error_messages else None
 
 
 def _direct_read(_name: str, function):
@@ -320,12 +331,107 @@ def test_save_image_infers_format_from_suffix(monkeypatch, tmp_path):
 
     result = minimal.save_image(str(output))
 
-    assert result["path"] == str(output.resolve())
+    canonical_output = output.with_suffix(".png").resolve()
+    assert result["path"] == str(canonical_output)
     assert result["format"] == "png"
     assert result["image"]["title"] == "active"
     assert fake_ij.save_count == 1
-    assert fake_ij.saved_path == str(output.resolve())
+    assert fake_ij.saved_path == str(canonical_output)
     assert fake_ij.parent_exists_when_saved is True
+    assert canonical_output.is_file()
+
+
+def test_save_image_canonicalizes_jpeg_alias_before_dispatch(monkeypatch, tmp_path):
+    output = tmp_path / "nested" / "result.JPEG"
+    fake_ij = FakeIJ(active=FakeImage("active", 4, 4))
+    monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
+
+    result = minimal.save_image(str(output))
+
+    canonical_output = output.with_suffix(".jpg").resolve()
+    assert result["path"] == str(canonical_output)
+    assert result["format"] == "jpg"
+    assert fake_ij.save_count == 1
+    assert fake_ij.saved_path == str(canonical_output)
+    assert canonical_output.is_file()
+
+
+def test_save_image_rejects_unsupported_suffix_before_dispatch(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("called")),
+    )
+
+    with pytest.raises(FijiError, match="Unsupported image extension") as raised:
+        minimal.save_image(str(tmp_path / "result.webp"))
+
+    assert raised.value.outcome is Outcome.FAILED
+
+
+def test_save_image_rejects_existing_directory_before_dispatch(monkeypatch, tmp_path):
+    output = tmp_path / "output.png"
+    output.mkdir()
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("called")),
+    )
+
+    with pytest.raises(FijiError, match="directory") as raised:
+        minimal.save_image(str(output))
+
+    assert raised.value.outcome is Outcome.FAILED
+
+
+def test_save_image_clears_stale_imagej_error_before_dispatch(monkeypatch, tmp_path):
+    output = tmp_path / "result.png"
+    fake_ij = FakeIJ(
+        active=FakeImage("active", 4, 4),
+        error_messages=["stale error", None],
+    )
+    monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
+
+    result = minimal.save_image(str(output))
+
+    assert result["path"] == str(output.resolve())
+    assert fake_ij.save_count == 1
+    assert fake_ij.error_message_calls == 2
+
+
+def test_save_image_reports_new_imagej_error_after_one_dispatch(monkeypatch, tmp_path):
+    output = tmp_path / "result.png"
+    fake_ij = FakeIJ(
+        active=FakeImage("active", 4, 4),
+        error_messages=[None, "disk full"],
+    )
+    monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
+
+    with pytest.raises(FijiError, match="disk full") as raised:
+        minimal.save_image(str(output))
+
+    assert raised.value.code == "save_failed"
+    assert raised.value.outcome is Outcome.UNKNOWN
+    assert fake_ij.save_count == 1
+    assert fake_ij.error_message_calls == 2
+
+
+def test_save_image_rejects_silent_no_file_after_one_dispatch(monkeypatch, tmp_path):
+    output = tmp_path / "result.png"
+    fake_ij = FakeIJ(
+        active=FakeImage("active", 4, 4),
+        error_messages=[None, None],
+        write_saved_file=False,
+    )
+    monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
+
+    with pytest.raises(FijiError, match="did not create") as raised:
+        minimal.save_image(str(output))
+
+    assert raised.value.code == "save_failed"
+    assert raised.value.outcome is Outcome.UNKNOWN
+    assert fake_ij.save_count == 1
+    assert fake_ij.error_message_calls == 2
 
 
 def test_save_image_requires_active_image_before_dispatch(monkeypatch, tmp_path):
