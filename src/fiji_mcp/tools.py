@@ -590,11 +590,19 @@ def _command_candidates_text(commands: list[dict[str, Any]]) -> str:
 
 
 def _ambiguous_command(name: str, candidates: list[dict[str, Any]]) -> FijiError:
+    delegate_classes = {
+        _command_text(command.get("class_name")) for command in candidates
+    }
+    recovery = "Use an exact delegate class from search_commands and retry."
+    if len(delegate_classes) == 1:
+        recovery = (
+            "Use an exact case-sensitive display name from search_commands and retry."
+        )
     return _failed(
         "ambiguous_command",
         f"Command '{name}' is ambiguous. Candidate commands: "
         f"{_command_candidates_text(candidates)}.",
-        "Use an exact delegate class from search_commands and retry.",
+        recovery,
     )
 
 

@@ -602,6 +602,10 @@ def test_ambiguous_same_class_actions_list_each_name_class_pair():
     message = str(raised.value)
     assert "Smooth (ij.plugin.filter.Filters)" in message
     assert "SMOOTH (ij.plugin.filter.Filters)" in message
+    assert raised.value.recovery == (
+        "Use an exact case-sensitive display name from search_commands and retry."
+    )
+    assert "delegate class" not in raised.value.recovery
 
 
 def test_missing_command_is_deterministic():

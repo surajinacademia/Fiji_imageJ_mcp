@@ -1,7 +1,7 @@
 # Minimal Fiji MCP Design
 
 **Date:** 2026-08-10
-**Status:** Approved design; implementation not started
+**Status:** Approved design; implemented
 **Scope:** Replace the current broad Fiji MCP API with a small, script-first server
 
 ## 1. Purpose
