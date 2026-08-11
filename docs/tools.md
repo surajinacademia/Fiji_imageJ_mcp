@@ -121,6 +121,11 @@ Equal-sized inputs additionally contain `mae`, `rmse`, and
 `changed_pixel_fraction`. An optional `save_path` receives the exact comparison
 PNG bytes.
 
+Each source is independently limited to 16,777,216 pixels. A source over that
+limit fails with `image_too_large`; resize it to at or below the comparison
+pixel limit and retry. Server-generated screenshots are at most 2,048 × 2,048
+pixels, so they remain within this per-source limit.
+
 The comparison does not resize or crop source images for metrics. When source
 dimensions differ, it returns the side-by-side visual and dimensions but omits
 pixel metrics.

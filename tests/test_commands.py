@@ -731,6 +731,37 @@ def test_run_command_rejects_non_mapping_parameters_before_java(monkeypatch):
     assert raised.value.outcome is Outcome.FAILED
 
 
+def test_run_command_classifies_parameter_conversion_before_command_dispatch(
+    monkeypatch,
+):
+    info = _fake_scijava_info()
+    service = FakeCommandService([info])
+    fake_ij = FakeIJ(service)
+    conversion_calls: list[dict[str, object]] = []
+
+    def fail_to_java(parameters: dict[str, object]) -> FakeJavaMap:
+        conversion_calls.append(parameters)
+        raise RuntimeError("cannot convert structured parameters")
+
+    monkeypatch.setattr(
+        sj,
+        "jimport",
+        _fake_jimport(FakeMenus([FakeEntry("Blur", "pkg.Blur")])),
+    )
+    monkeypatch.setattr(fake_ij.py, "to_java", fail_to_java)
+    bridge._reset_runtime_for_tests(ready_ij=fake_ij)
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    try:
+        with pytest.raises(FijiError) as raised:
+            minimal.run_command("pkg.Blur", parameters={"sigma": 2})
+    finally:
+        bridge._reset_runtime_for_tests()
+
+    assert raised.value.outcome is Outcome.FAILED
+    assert conversion_calls == [{"sigma": 2}]
+    assert service.run_calls == []
+
+
 def test_run_command_dispatches_scijava_once_with_one_java_map(monkeypatch):
     info = _fake_scijava_info()
     service = FakeCommandService([info], outputs={"answer": FakeJavaInteger(7)})

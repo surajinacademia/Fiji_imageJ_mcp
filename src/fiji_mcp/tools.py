@@ -871,7 +871,9 @@ def run_command(
     """Run one resolved SciJava or ImageJ1 command exactly once."""
     target = _validate_command_arguments(name, parameters, options)
 
-    def prepare(ij: Any) -> tuple[dict[str, Any], str, Any | None, Any | None]:
+    def prepare(
+        ij: Any,
+    ) -> tuple[dict[str, Any], str, Any | None, Any | None, Any | None]:
         command = _resolve_command(_deduplicate_commands(_collect_commands(ij)), target)
         route = _validate_route_inputs(
             command,
@@ -880,18 +882,18 @@ def run_command(
         )
         if route == "structured_parameters":
             service, command_info = _command_info_for(ij, command)
-            return command, route, service, command_info
-        return command, route, None, None
+            input_map = ij.py.to_java(parameters or {})
+            return command, route, service, command_info, input_map
+        return command, route, None, None, None
 
     def dispatch(
         ij: Any,
-        prepared: tuple[dict[str, Any], str, Any | None, Any | None],
+        prepared: tuple[dict[str, Any], str, Any | None, Any | None, Any | None],
     ) -> dict[str, Any]:
-        command, route, service, command_info = prepared
+        command, route, service, command_info, input_map = prepared
         if route == "structured_parameters":
             assert service is not None
             assert command_info is not None
-            input_map = ij.py.to_java(parameters or {})
             command_module = service.run(command_info, True, input_map).get()
             return _command_response(
                 ij,
