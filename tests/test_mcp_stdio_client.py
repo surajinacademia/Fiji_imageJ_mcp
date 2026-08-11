@@ -14,6 +14,15 @@ from fastmcp import Client  # noqa: E402  (after importorskip)
 from fastmcp.client.transports import StdioTransport  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_PRECONFIGURED_ROOT_LOGGER_SERVER = "\n".join(
+    (
+        "import logging",
+        "import sys",
+        "logging.basicConfig(level=logging.INFO, stream=sys.stdout, force=True)",
+        "from fiji_mcp.__main__ import main",
+        "main()",
+    )
+)
 
 EXPECTED = {
     "get_state",
@@ -49,6 +58,17 @@ def _stdio_transport(stderr_log: Path, fiji_path: Path | None = None) -> StdioTr
         command=sys.executable,
         args=["-m", "fiji_mcp"],
         env=_stdio_server_env(fiji_path),
+        cwd=str(_REPO_ROOT),
+        keep_alive=False,
+        log_file=stderr_log,
+    )
+
+
+def _preconfigured_root_logger_transport(stderr_log: Path) -> StdioTransport:
+    return StdioTransport(
+        command=sys.executable,
+        args=["-c", _PRECONFIGURED_ROOT_LOGGER_SERVER],
+        env=_stdio_server_env(),
         cwd=str(_REPO_ROOT),
         keep_alive=False,
         log_file=stderr_log,
@@ -95,6 +115,27 @@ async def test_mcp_stdio_list_tools_exposes_exact_handlers(tmp_path: Path) -> No
     async with client:
         tools = await client.list_tools()
     assert {tool.name for tool in tools} == EXPECTED
+    assert stderr_log.read_text().count("Starting Fiji MCP stdio server") == 1
+
+
+@pytest.mark.mcp_stdio
+@pytest.mark.timeout(90)
+async def test_preconfigured_root_stdout_logger_cannot_corrupt_mcp_protocol(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A pre-existing root handler must be replaced before stdio startup logs."""
+    stderr_log = tmp_path / "stderr.log"
+    transport = _preconfigured_root_logger_transport(stderr_log)
+    client = Client(transport, init_timeout=90, timeout=90)
+    async with client:
+        tools = await client.list_tools()
+    assert {tool.name for tool in tools} == EXPECTED
+    assert not any(
+        record.name == "mcp.client.stdio"
+        and record.getMessage() == "Failed to parse JSONRPC message from server"
+        for record in caplog.records
+    )
     assert stderr_log.read_text().count("Starting Fiji MCP stdio server") == 1
 
 

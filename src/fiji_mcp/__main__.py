@@ -12,6 +12,7 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
         stream=sys.stderr,
+        force=True,
     )
     logging.getLogger(__name__).info("Starting Fiji MCP stdio server")
 
