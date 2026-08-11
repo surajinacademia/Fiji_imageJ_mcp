@@ -214,7 +214,8 @@ def _copy_current_annotations(
     image: Any, detached: Any, c: int, z: int, t: int
 ) -> None:
     try:
-        overlay = _filtered_overlay(image.getOverlay(), c, z, t)
+        source_overlay = None if _hide_overlay(image) else image.getOverlay()
+        overlay = _filtered_overlay(source_overlay, c, z, t)
         active_roi = _clone_roi(image.getRoi())
     except FijiError:
         raise
@@ -258,6 +259,18 @@ def _annotation_present(image: Any, method_name: str) -> bool:
         return getattr(image, method_name)() is not None
     except Exception:
         return False
+
+
+def _hide_overlay(image: Any) -> bool:
+    """Return ImageJ's overlay-visibility state; absent APIs mean visible."""
+    try:
+        return bool(image.getHideOverlay())
+    except Exception:
+        return False
+
+
+def _visible_overlay_present(image: Any) -> bool:
+    return not _hide_overlay(image) and _annotation_present(image, "getOverlay")
 
 
 def _buffered_image_from_flattened(image: Any) -> Any:
@@ -319,7 +332,7 @@ def render_active_image(ij: Any) -> RenderedPNG:
             "current_c": c,
             "current_z": z,
             "current_t": t,
-            "overlay_present": _annotation_present(image, "getOverlay"),
+            "overlay_present": _visible_overlay_present(image),
             "roi_present": _annotation_present(image, "getRoi"),
         },
     )
@@ -444,19 +457,18 @@ def _validate_image_header(path: Path, image: Image.Image) -> None:
 
 def _open_image_header(path: Path) -> Image.Image:
     try:
-        image = Image.open(path)
+        with Image.open(path) as image:
+            _validate_image_header(path, image)
+            image.load()
+            return image.convert("RGB")
+    except FijiError:
+        raise
     except Exception as error:
         raise _failed(
             "unreadable_image",
             f"Could not read image: {path}",
             "Provide a readable local raster image and retry.",
         ) from error
-    try:
-        _validate_image_header(path, image)
-    except FijiError:
-        image.close()
-        raise
-    return image
 
 
 def _display_copy(image: Image.Image) -> Image.Image:

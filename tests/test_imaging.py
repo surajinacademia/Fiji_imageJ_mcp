@@ -170,8 +170,10 @@ class FakeOverlay:
     def __init__(self, rois: list[FakeRoi]) -> None:
         self.rois = rois
         self.crop_args: tuple[int, int, int, int, int, int] | None = None
+        self.duplicate_calls = 0
 
     def duplicate(self) -> FakeOverlay:
+        self.duplicate_calls += 1
         return FakeOverlay([roi.clone() for roi in self.rois])
 
     def crop(self, c1: int, c2: int, z1: int, z2: int, t1: int, t2: int) -> FakeOverlay:
@@ -227,10 +229,11 @@ class FakeDetachedImage:
 
 
 class FakeFullPlaneImagePlus:
-    def __init__(self) -> None:
+    def __init__(self, *, hide_overlay: bool = False) -> None:
         self.width = 160
         self.height = 100
         self.position = (2, 3, 4)
+        self.hide_overlay = hide_overlay
         self.color_model = object()
         self.processor = FakePlaneProcessor(self.width, self.height, self.color_model)
         self.roi = FakeRoi("active", self.position)
@@ -270,6 +273,9 @@ class FakeFullPlaneImagePlus:
 
     def getOverlay(self) -> FakeOverlay:
         return self.overlay
+
+    def getHideOverlay(self) -> bool:
+        return self.hide_overlay
 
     def getRoi(self) -> FakeRoi:
         return self.roi
@@ -418,6 +424,46 @@ def test_render_active_image_keeps_the_full_current_plane_and_clones_annotations
     assert [roi.position for roi in detached.overlay.rois] == [(1, 1, 1)] * 2
 
 
+def test_render_active_image_excludes_a_hidden_overlay_but_keeps_active_roi(
+    monkeypatch,
+) -> None:
+    source = FakeFullPlaneImagePlus(hide_overlay=True)
+    source_processor = source.processor
+    source_position = source.position
+    source_roi = source.roi
+    source_roi_position = source.roi.position
+    source_overlay = source.overlay
+    source_overlay_positions = [roi.position for roi in source.overlay.rois]
+    monkeypatch.setattr(
+        imaging,
+        "_buffered_image_to_pil",
+        lambda buffered: Image.new("RGB", (source.width, source.height)),
+    )
+
+    result = render_active_image(FakeIJ(active=source))
+
+    detached = source.created
+    assert detached is not None
+    assert result.width == source.width
+    assert result.height == source.height
+    assert result.metadata["overlay_present"] is False
+    assert result.metadata["roi_present"] is True
+    assert detached.overlay is None
+    assert detached.roi is not None
+    assert detached.roi is not source_roi
+    assert detached.roi.name == "active"
+    assert detached.roi.position == (1, 1, 1)
+    assert source.processor is source_processor
+    assert source.position == source_position
+    assert source.hide_overlay is True
+    assert source.roi is source_roi
+    assert source.roi.position == source_roi_position
+    assert source.overlay is source_overlay
+    assert source.overlay.duplicate_calls == 0
+    assert source.overlay.crop_args is None
+    assert [roi.position for roi in source.overlay.rois] == source_overlay_positions
+
+
 def _header_only_png(width: int, height: int) -> bytes:
     def chunk(kind: bytes, payload: bytes) -> bytes:
         checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
@@ -456,6 +502,28 @@ def test_compare_paths_rejects_oversized_header_before_decode_or_arrays(
         compare_paths(path, path)
 
     assert raised.value.code == "image_too_large"
+    assert raised.value.outcome is Outcome.FAILED
+
+
+def test_compare_paths_converts_truncated_within_budget_images_to_fiji_errors(
+    monkeypatch, tmp_path: Path
+) -> None:
+    truncated = tmp_path / "truncated.png"
+    valid = tmp_path / "valid.png"
+    truncated.write_bytes(_header_only_png(8, 6))
+    Image.new("RGB", (8, 6), (1, 2, 3)).save(valid)
+    monkeypatch.setattr(
+        imaging.np,
+        "asarray",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("metrics were computed")
+        ),
+    )
+
+    with pytest.raises(FijiError) as raised:
+        compare_paths(truncated, valid)
+
+    assert raised.value.code == "unreadable_image"
     assert raised.value.outcome is Outcome.FAILED
 
 
