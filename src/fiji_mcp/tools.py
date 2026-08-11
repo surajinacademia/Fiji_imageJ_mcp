@@ -607,6 +607,7 @@ def _ambiguous_command(
         and all(
             catalog_names.count(display_name) == 1 for display_name in display_names
         )
+        and all(display_name not in catalog_classes for display_name in display_names)
     ):
         recovery = (
             "Use an exact case-sensitive display name from search_commands and retry."

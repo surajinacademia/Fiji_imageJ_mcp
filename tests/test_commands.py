@@ -652,6 +652,30 @@ def test_ambiguous_same_class_recovery_requires_globally_unique_display_names():
     assert "delegate class" not in raised.value.recovery
 
 
+def test_ambiguous_same_class_recovery_respects_class_precedence():
+    commands = [
+        {"name": "pkg.Other", "class_name": "pkg.Shared", "family": "scijava"},
+        {"name": "Bar", "class_name": "pkg.Shared", "family": "scijava"},
+        {
+            "name": "Unrelated mutation",
+            "class_name": "pkg.Other",
+            "family": "scijava",
+        },
+    ]
+
+    assert (
+        minimal._resolve_command(commands, "pkg.Other")["name"] == "Unrelated mutation"
+    )
+    with pytest.raises(FijiError) as raised:
+        minimal._resolve_command(commands, "pkg.Shared")
+
+    assert (
+        raised.value.recovery == "Use run_script with IJM or Groovy for this command."
+    )
+    assert "display name" not in raised.value.recovery
+    assert "delegate class" not in raised.value.recovery
+
+
 def test_missing_command_is_deterministic():
     with pytest.raises(FijiError) as raised:
         minimal._resolve_command(COMMANDS, "does not exist")
