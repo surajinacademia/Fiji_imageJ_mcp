@@ -240,12 +240,17 @@ class FakeLegacyIJ:
     def __init__(self, log: str) -> None:
         self._log = log
         self.run_calls: list[tuple[str, str]] = []
+        self.run_macro_calls: list[str] = []
 
     def getLog(self) -> str:
         return self._log
 
     def run(self, name: str, options: str) -> None:
         self.run_calls.append((name, options))
+
+    def runMacro(self, code: str) -> FakeJavaInteger:
+        self.run_macro_calls.append(code)
+        return FakeJavaInteger(11)
 
 
 class FakeJavaMap:
@@ -713,16 +718,132 @@ def test_run_script_dispatches_only_ijm_and_groovy(monkeypatch):
         active_image=FakeImage(),
     )
     monkeypatch.setattr(minimal, "run_mutation", _direct_mutation(fake_ij))
+    ijm_macro_calls: list[str] = []
+
+    def run_ijm_macro(_ij, code):
+        ijm_macro_calls.append(code)
+        return FakeJavaInteger(11), ""
+
+    monkeypatch.setattr(minimal, "_run_ijm_macro", run_ijm_macro, raising=False)
 
     ijm = minimal.run_script("ijm", "return 11;")
     groovy = minimal.run_script("groovy", "return 12")
 
-    assert fake_ij.py.run_macro_calls == ["return 11;"]
+    assert ijm_macro_calls == ["return 11;"]
+    assert fake_ij.IJ.run_macro_calls == []
+    assert fake_ij.py.run_macro_calls == []
     assert fake_ij.py.run_script_calls == [("groovy", "return 12")]
     assert ijm["result"] == 11
     assert groovy["result"] == 12
     assert ijm["log_tail"] == "log"
     assert groovy["active_image"]["title"] == "after-command"
+
+
+def test_ijm_stdout_capture_returns_text_and_restores_previous_stream(monkeypatch):
+    original_stream = object()
+
+    class FakeSystem:
+        out = original_stream
+        set_out_calls: list[object] = []
+
+        @classmethod
+        def setOut(cls, stream: object) -> None:
+            cls.out = stream
+            cls.set_out_calls.append(stream)
+
+    class FakeBuffer:
+        def __init__(self) -> None:
+            self.text = ""
+
+        def toString(self, encoding: str) -> str:
+            assert encoding == "UTF-8"
+            return self.text
+
+    class FakePrintStream:
+        def __init__(self, buffer: FakeBuffer, *_args: object) -> None:
+            self.buffer = buffer
+            self.flushed = False
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+        def flush(self) -> None:
+            self.flushed = True
+
+        def write(self, text: str) -> None:
+            self.buffer.text += text
+
+    def jimport(name: str) -> object:
+        mapping = {
+            "java.lang.System": FakeSystem,
+            "java.io.ByteArrayOutputStream": FakeBuffer,
+            "java.io.PrintStream": FakePrintStream,
+        }
+        return mapping[name]
+
+    class MacroRunner:
+        def runMacro(self, code: str) -> FakeJavaInteger:
+            assert code == 'print("ijm-output");'
+            assert FakeSystem.out is not original_stream
+            FakeSystem.out.write("ijm-output\n")
+            return FakeJavaInteger(11)
+
+    fake_ij = type("FakeIJMGateway", (), {"IJ": MacroRunner()})()
+    monkeypatch.setattr(sj, "jimport", jimport)
+
+    result, captured = minimal._run_ijm_macro(fake_ij, 'print("ijm-output");')
+
+    assert result.intValue() == 11
+    assert captured == "ijm-output\n"
+    assert FakeSystem.out is original_stream
+    assert FakeSystem.set_out_calls[-1] is original_stream
+
+
+def test_ijm_stdout_capture_restores_previous_stream_after_macro_error(monkeypatch):
+    original_stream = object()
+
+    class FakeSystem:
+        out = original_stream
+
+        @classmethod
+        def setOut(cls, stream: object) -> None:
+            cls.out = stream
+
+    class FakeBuffer:
+        def toString(self, _encoding: str) -> str:
+            return ""
+
+    class FakePrintStream:
+        def __init__(self, *_args: object) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+        def flush(self) -> None:
+            pass
+
+    def jimport(name: str) -> object:
+        mapping = {
+            "java.lang.System": FakeSystem,
+            "java.io.ByteArrayOutputStream": FakeBuffer,
+            "java.io.PrintStream": FakePrintStream,
+        }
+        return mapping[name]
+
+    class MacroRunner:
+        def runMacro(self, _code: str) -> None:
+            assert FakeSystem.out is not original_stream
+            raise RuntimeError("macro failed")
+
+    fake_ij = type("FakeIJMGateway", (), {"IJ": MacroRunner()})()
+    monkeypatch.setattr(sj, "jimport", jimport)
+
+    with pytest.raises(RuntimeError, match="macro failed"):
+        minimal._run_ijm_macro(fake_ij, 'print("ijm-output");')
+
+    assert FakeSystem.out is original_stream
 
 
 @pytest.mark.parametrize("language", ["python", "javascript", "", []])
@@ -749,21 +870,19 @@ def test_run_script_requires_nonempty_code_before_java(monkeypatch):
 
 
 def test_gui_required_script_failure_keeps_bridge_outcome(monkeypatch):
-    class HeadlessIJ(FakeIJ):
-        pass
+    headless_error = type(
+        "HeadlessException",
+        (Exception,),
+        {"__module__": "java.awt"},
+    )
 
-    class HeadlessPy(FakePy):
-        def run_macro(self, code: str) -> FakeJavaInteger:
-            raise type(
-                "HeadlessException",
-                (Exception,),
-                {"__module__": "java.awt"},
-            )()
+    def raise_headless(_ij: object, _code: str) -> tuple[object, str]:
+        raise headless_error()
 
-    fake_ij = HeadlessIJ(FakeCommandService([]))
-    fake_ij.py = HeadlessPy(FakeJavaMap())
+    fake_ij = FakeIJ(FakeCommandService([]))
     bridge._reset_runtime_for_tests(ready_ij=fake_ij)
     monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    monkeypatch.setattr(minimal, "_run_ijm_macro", raise_headless)
     try:
         with pytest.raises(FijiError) as raised:
             minimal.run_script("ijm", "run('Measure');")

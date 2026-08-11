@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import platform
+import sys
 import threading
+import types
 from pathlib import Path
 
 import pytest
@@ -14,6 +17,30 @@ def _fiji_root(tmp_path: Path) -> Path:
     (tmp_path / "jars").mkdir()
     (tmp_path / "plugins").mkdir()
     return tmp_path
+
+
+def _bundled_macos_jvm(root: Path, name: str) -> Path:
+    home = root / "java" / "macos-arm64" / name / "zulu-21.jdk" / "Contents" / "Home"
+    executable = home / "bin" / "java"
+    library = home / "lib" / "server" / "libjvm.dylib"
+    executable.parent.mkdir(parents=True)
+    library.parent.mkdir(parents=True)
+    executable.touch()
+    executable.chmod(0o755)
+    library.touch()
+    return library
+
+
+def _bundled_linux_jvm(root: Path, bucket: str, name: str) -> Path:
+    home = root / "java" / bucket / name
+    executable = home / "bin" / "java"
+    library = home / "lib" / "server" / "libjvm.so"
+    executable.parent.mkdir(parents=True)
+    library.parent.mkdir(parents=True)
+    executable.touch()
+    executable.chmod(0o755)
+    library.touch()
+    return library
 
 
 def test_settings_require_real_fiji_root(monkeypatch, tmp_path):
@@ -83,7 +110,9 @@ def test_runtime_path_failure_is_invalid_configuration_without_retry(monkeypatch
         return original(path)
 
     monkeypatch.setattr(bridge, "_resolve_and_validate_root", unresolved)
-    with pytest.raises(bridge.FijiError, match="Could not validate FIJI_PATH") as raised:
+    with pytest.raises(
+        bridge.FijiError, match="Could not validate FIJI_PATH"
+    ) as raised:
         bridge.load_settings()
     assert attempts == 1
     assert raised.value.code == "invalid_configuration"
@@ -184,6 +213,122 @@ def test_java_stdout_redirect_targets_system_err(monkeypatch):
     monkeypatch.setattr(sj, "jimport", lambda name: FakeSystem)
     bridge._redirect_java_stdout()
     assert FakeSystem.received is FakeSystem.err
+
+
+def test_start_fiji_pins_one_bundled_jvm_before_imagej_init(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    jvm_path = _bundled_macos_jvm(root, "zulu21")
+    events: list[tuple[object, ...]] = []
+    gateway = object()
+
+    fake_sj = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            get_kwargs=lambda: {"interrupt": True},
+            add_kwargs=lambda **kwargs: events.append(("jvmpath", kwargs["jvmpath"])),
+        ),
+        jvm_started=lambda: False,
+        when_jvm_starts=lambda _callback: events.append(("when_jvm_starts",)),
+    )
+
+    def init(path: str, *, mode: str) -> object:
+        events.append(("imagej_init", path, mode))
+        return gateway
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    monkeypatch.setitem(sys.modules, "scyjava", fake_sj)
+    monkeypatch.setitem(sys.modules, "imagej", types.SimpleNamespace(init=init))
+
+    assert bridge._start_fiji(bridge.Settings(root, "headless")) is gateway
+    assert events == [
+        ("jvmpath", str(jvm_path)),
+        ("when_jvm_starts",),
+        ("imagej_init", str(root), "headless"),
+    ]
+
+
+def test_bundled_jvm_path_rejects_multiple_valid_runtimes(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    _bundled_macos_jvm(root, "zulu21-a")
+    _bundled_macos_jvm(root, "zulu21-b")
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+
+    with pytest.raises(RuntimeError, match="multiple bundled JVMs"):
+        bridge._bundled_jvm_path(root)
+
+
+def test_bundled_jvm_path_accepts_linux_amd64_alias(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    jvm_path = _bundled_linux_jvm(root, "linux-amd64", "zulu21")
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+
+    assert bridge._bundled_jvm_path(root) == jvm_path
+
+
+def test_bundled_jvm_path_rejects_multiple_linux_alias_runtimes(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    _bundled_linux_jvm(root, "linux-amd64", "zulu21-a")
+    _bundled_linux_jvm(root, "linux-x64", "zulu21-b")
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+
+    with pytest.raises(RuntimeError, match="multiple bundled JVMs"):
+        bridge._bundled_jvm_path(root)
+
+
+def test_start_fiji_retains_preconfigured_jvmpath(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    _bundled_macos_jvm(root, "zulu21")
+    calls: list[dict[str, object]] = []
+    gateway = object()
+
+    fake_sj = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            get_kwargs=lambda: {"jvmpath": "/external/libjvm.dylib"},
+            add_kwargs=lambda **kwargs: calls.append(kwargs),
+        ),
+        jvm_started=lambda: False,
+        when_jvm_starts=lambda _callback: None,
+    )
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    monkeypatch.setitem(sys.modules, "scyjava", fake_sj)
+    monkeypatch.setitem(
+        sys.modules,
+        "imagej",
+        types.SimpleNamespace(init=lambda _path, *, mode: gateway),
+    )
+
+    assert bridge._start_fiji(bridge.Settings(root, "headless")) is gateway
+    assert calls == []
+
+
+def test_start_fiji_retains_scijava_fallback_without_bundled_jvm(monkeypatch, tmp_path):
+    root = _fiji_root(tmp_path)
+    calls: list[dict[str, object]] = []
+    gateway = object()
+
+    fake_sj = types.SimpleNamespace(
+        config=types.SimpleNamespace(
+            get_kwargs=lambda: {"interrupt": True},
+            add_kwargs=lambda **kwargs: calls.append(kwargs),
+        ),
+        jvm_started=lambda: False,
+        when_jvm_starts=lambda _callback: None,
+    )
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    monkeypatch.setitem(sys.modules, "scyjava", fake_sj)
+    monkeypatch.setitem(
+        sys.modules,
+        "imagej",
+        types.SimpleNamespace(init=lambda _path, *, mode: gateway),
+    )
+
+    assert bridge._start_fiji(bridge.Settings(root, "headless")) is gateway
+    assert calls == []
 
 
 def test_read_retries_only_allowlisted_failure(monkeypatch):

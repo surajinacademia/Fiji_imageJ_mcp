@@ -7,6 +7,8 @@ import heapq
 import json
 import math
 import os
+import platform
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -804,9 +806,88 @@ def _redirect_java_stdout() -> None:
     system.setOut(system.err)
 
 
+def _fiji_java_buckets() -> tuple[str, ...]:
+    architecture = platform.machine().casefold()
+    if architecture in {"aarch64", "arm64"}:
+        suffix = "arm64"
+    elif architecture in {"amd64", "x64", "x86_64"}:
+        suffix = "x64"
+    else:
+        return ()
+
+    if sys.platform == "darwin":
+        return (f"macos-{suffix}",)
+    if sys.platform.startswith("linux"):
+        if suffix == "x64":
+            return ("linux-amd64", "linux-x64")
+        return ("linux-arm64",)
+    if sys.platform == "win32":
+        return ("win64" if suffix == "x64" else "win-arm64",)
+    return ()
+
+
+def _jvm_library_paths(java_home: Path) -> tuple[Path, ...]:
+    if sys.platform == "darwin":
+        return (java_home / "lib" / "server" / "libjvm.dylib",)
+    if sys.platform == "win32":
+        return (
+            java_home / "bin" / "server" / "jvm.dll",
+            java_home / "lib" / "server" / "jvm.dll",
+        )
+    return (java_home / "lib" / "server" / "libjvm.so",)
+
+
+def _bundled_jvm_path(fiji_path: Path) -> Path | None:
+    """Return the sole valid JVM packaged for this Fiji platform, if any."""
+    bucket_names = _fiji_java_buckets()
+    if not bucket_names:
+        return None
+
+    executable_name = "java.exe" if sys.platform == "win32" else "java"
+    candidates: set[Path] = set()
+    buckets = [fiji_path / "java" / bucket_name for bucket_name in bucket_names]
+    for bucket in buckets:
+        if not bucket.is_dir():
+            continue
+        for executable in bucket.glob(f"**/bin/{executable_name}"):
+            try:
+                is_executable = executable.is_file() and os.access(executable, os.X_OK)
+            except OSError:
+                continue
+            if not is_executable:
+                continue
+            java_home = executable.parent.parent
+            for library in _jvm_library_paths(java_home):
+                try:
+                    if library.is_file() and os.access(library, os.R_OK):
+                        candidates.add(library.resolve())
+                except OSError:
+                    continue
+
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        found = ", ".join(str(path) for path in sorted(candidates))
+        raise RuntimeError(
+            "Found multiple bundled JVMs in "
+            f"{', '.join(str(bucket) for bucket in buckets)}; "
+            f"select one before starting Fiji: {found}"
+        )
+    return next(iter(candidates))
+
+
+def _configure_bundled_jvm(sj: Any, fiji_path: Path) -> None:
+    """Prefer Fiji's own compatible runtime before the JVM starts."""
+    if sj.jvm_started() or sj.config.get_kwargs().get("jvmpath"):
+        return
+    if jvm_path := _bundled_jvm_path(fiji_path):
+        sj.config.add_kwargs(jvmpath=str(jvm_path))
+
+
 def _start_fiji(settings: Settings) -> Any:
     import scyjava as sj
 
+    _configure_bundled_jvm(sj, settings.fiji_path)
     sj.when_jvm_starts(_redirect_java_stdout)
     import imagej
 

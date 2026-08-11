@@ -722,6 +722,33 @@ def _log_tail(ij: Any) -> str:
     return "" if log is None else str(log)[-_LOG_TAIL_CHARS:]
 
 
+def _run_ijm_macro(ij: Any, code: str) -> tuple[Any, str]:
+    """Run one synchronous IJM macro while retaining its bounded stdout tail."""
+    import scyjava as sj
+
+    system = sj.jimport("java.lang.System")
+    byte_array_output_stream = sj.jimport("java.io.ByteArrayOutputStream")
+    print_stream = sj.jimport("java.io.PrintStream")
+    previous_stdout = system.out
+    captured = byte_array_output_stream()
+    stream = print_stream(captured, True, "UTF-8")
+    try:
+        system.setOut(stream)
+        result = ij.IJ.runMacro(code)
+        stream.flush()
+        return result, str(captured.toString("UTF-8"))[-_LOG_TAIL_CHARS:]
+    finally:
+        system.setOut(previous_stdout)
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _combined_log_tail(log_tail: str, captured_stdout: str) -> str:
+    return f"{log_tail}{captured_stdout}"[-_LOG_TAIL_CHARS:]
+
+
 def _command_info_for(ij: Any, command: dict[str, Any]) -> tuple[Any, Any]:
     """Return the catalogued SciJava service and its exact CommandInfo."""
     command_info = command.get("_command_info")
@@ -871,14 +898,15 @@ def run_script(language: Literal["ijm", "groovy"], code: str) -> dict[str, Any]:
         return selected_language
 
     def dispatch(ij: Any, prepared_language: str) -> dict[str, Any]:
+        captured_stdout = ""
         if prepared_language == "ijm":
-            result = ij.py.run_macro(code)
+            result, captured_stdout = _run_ijm_macro(ij, code)
         else:
             result = ij.py.run_script("groovy", code)
         return {
             "language": prepared_language,
             "result": to_jsonable(result),
-            "log_tail": _log_tail(ij),
+            "log_tail": _combined_log_tail(_log_tail(ij), captured_stdout),
             "active_image": _active_image_after_execution(ij),
         }
 
