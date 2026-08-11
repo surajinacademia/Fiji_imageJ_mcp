@@ -62,11 +62,14 @@ class FakeInput:
         type_name: str,
         required: bool,
         description: str,
+        *,
+        auto_fill: bool = False,
     ) -> None:
         self._name = name
         self._type = FakeJavaClass(type_name)
         self._required = required
         self._description = description
+        self._auto_fill = auto_fill
 
     def getDescription(self) -> str:
         return self._description
@@ -80,13 +83,27 @@ class FakeInput:
     def isRequired(self) -> bool:
         return self._required
 
+    def isAutoFill(self) -> bool:
+        return self._auto_fill
+
+
+class FakeMenuPath:
+    def __init__(self, menu_string: str) -> None:
+        self._menu_string = menu_string
+
+    def getMenuString(self) -> str:
+        return self._menu_string
+
+    def __str__(self) -> str:
+        raise AssertionError("getMenuString() must be used for menu paths")
+
 
 class FakeCommandInfo:
     def __init__(
         self,
         title: str,
         class_name: str,
-        menu_path: str,
+        menu_path: object,
         inputs: list[FakeInput],
     ) -> None:
         self._title = title
@@ -97,7 +114,7 @@ class FakeCommandInfo:
     def getDelegateClassName(self) -> str:
         return self._class_name
 
-    def getMenuPath(self) -> str:
+    def getMenuPath(self) -> object:
         return self._menu_path
 
     def getTitle(self) -> str:
@@ -105,6 +122,10 @@ class FakeCommandInfo:
 
     def inputs(self) -> list[FakeInput]:
         return self._inputs
+
+
+class FakeCommandInfoWithoutMenuPath(FakeCommandInfo):
+    getMenuPath = None
 
 
 class FakeFuture:
@@ -291,6 +312,16 @@ def _fake_jimport(menus: FakeMenus):
     return jimport
 
 
+def _collect_catalog(
+    monkeypatch,
+    scijava_commands: list[FakeCommandInfo],
+    legacy_entries: list[FakeEntry],
+) -> list[dict[str, object]]:
+    service = FakeCommandService(scijava_commands)
+    monkeypatch.setattr(sj, "jimport", _fake_jimport(FakeMenus(legacy_entries)))
+    return minimal._collect_commands(FakeIJ(service))
+
+
 def test_search_allows_empty_query_and_caps_limit(monkeypatch):
     monkeypatch.setattr(minimal, "_collect_commands", lambda _ij: COMMANDS)
     monkeypatch.setattr(minimal, "run_read", lambda _name, fn: fn(object()))
@@ -357,6 +388,113 @@ def test_collect_commands_merges_sorted_catalog_and_input_metadata(monkeypatch):
     )
 
 
+def test_collect_legacy_descriptors_preserves_same_class_actions(monkeypatch):
+    descriptors = {
+        "Smooth": 'ij.plugin.filter.Filters("smooth")',
+        "Sharpen": 'ij.plugin.filter.Filters("sharpen")',
+        "Find Edges": 'ij.plugin.filter.Filters("edge")',
+        "Plain Filters": "  ij.plugin.filter.Filters  ",
+    }
+    commands = _collect_catalog(
+        monkeypatch,
+        [],
+        [FakeEntry(name, descriptor) for name, descriptor in descriptors.items()],
+    )
+    legacy = {command["name"]: command for command in commands}
+
+    assert set(legacy) == set(descriptors)
+    assert {command["class_name"] for command in legacy.values()} == {
+        "ij.plugin.filter.Filters"
+    }
+    assert {
+        name: command["_legacy_descriptor"] for name, command in legacy.items()
+    } == descriptors
+    public = minimal._public_command(legacy["Smooth"])
+    assert public["class_name"] == "ij.plugin.filter.Filters"
+    assert not any(key.startswith("_") for key in public)
+
+
+def test_collect_scijava_menu_path_uses_menu_string(monkeypatch):
+    commands = _collect_catalog(
+        monkeypatch,
+        [
+            FakeCommandInfo(
+                "Blur",
+                "pkg.Blur",
+                FakeMenuPath("Process > Filters"),
+                [],
+            )
+        ],
+        [],
+    )
+
+    assert commands[0]["menu_path"] == "Process > Filters"
+
+
+def test_collect_scijava_menu_path_handles_null_or_absent_metadata(monkeypatch):
+    commands = _collect_catalog(
+        monkeypatch,
+        [
+            FakeCommandInfo("No path", "pkg.NullPath", None, []),
+            FakeCommandInfoWithoutMenuPath("Missing path", "pkg.NoPath", "", []),
+        ],
+        [],
+    )
+
+    assert {command["menu_path"] for command in commands} == {""}
+
+
+@pytest.mark.parametrize(
+    ("input_item", "route"),
+    [
+        (
+            FakeInput("sigma", "java.lang.Double", True, "Gaussian radius"),
+            "structured_parameters",
+        ),
+        (
+            FakeInput("image", "net.imagej.Dataset", True, "Image input"),
+            "script_fallback",
+        ),
+        (
+            FakeInput(
+                "image",
+                "net.imagej.Dataset",
+                True,
+                "Image input",
+                auto_fill=True,
+            ),
+            "structured_parameters",
+        ),
+        (
+            FakeInput("image", "net.imagej.Dataset", False, "Optional image"),
+            "structured_parameters",
+        ),
+    ],
+    ids=[
+        "required_primitive",
+        "required_complex",
+        "autofilled_complex",
+        "optional_complex",
+    ],
+)
+def test_scijava_route_is_derived_from_input_metadata(monkeypatch, input_item, route):
+    commands = _collect_catalog(
+        monkeypatch,
+        [FakeCommandInfo("Command", "pkg.Command", "Plugins", [input_item])],
+        [],
+    )
+
+    assert commands[0]["invocation_route"] == route
+    assert commands[0]["inputs"] == [
+        {
+            "name": input_item.getName(),
+            "type": input_item.getType().getName(),
+            "required": input_item.isRequired(),
+            "description": input_item.getDescription(),
+        }
+    ]
+
+
 def test_scijava_record_wins_duplicate_delegate():
     merged = minimal._deduplicate_commands(
         [
@@ -365,6 +503,7 @@ def test_scijava_record_wins_duplicate_delegate():
                 "class_name": "pkg.Blur",
                 "family": "imagej1",
                 "inputs": [],
+                "_legacy_descriptor": "pkg.Blur",
             },
             {
                 "name": "Blur",
@@ -381,6 +520,37 @@ def test_scijava_record_wins_duplicate_delegate():
             "family": "scijava",
             "inputs": [{"name": "sigma"}],
         }
+    ]
+
+
+def test_deduplication_keeps_distinct_argument_bearing_legacy_actions():
+    merged = minimal._deduplicate_commands(
+        [
+            {
+                "name": "Smooth",
+                "class_name": "ij.plugin.filter.Filters",
+                "family": "imagej1",
+                "_legacy_descriptor": 'ij.plugin.filter.Filters("smooth")',
+            },
+            {
+                "name": "Sharpen",
+                "class_name": "ij.plugin.filter.Filters",
+                "family": "imagej1",
+                "_legacy_descriptor": 'ij.plugin.filter.Filters("sharpen")',
+            },
+            {
+                "name": "Find Edges",
+                "class_name": "ij.plugin.filter.Filters",
+                "family": "imagej1",
+                "_legacy_descriptor": 'ij.plugin.filter.Filters("edge")',
+            },
+        ]
+    )
+
+    assert [command["name"] for command in merged] == [
+        "Find Edges",
+        "Sharpen",
+        "Smooth",
     ]
 
 
@@ -402,6 +572,31 @@ def test_ambiguous_case_insensitive_name_lists_classes():
     assert raised.value.retryable is False
     assert raised.value.outcome is Outcome.FAILED
     assert "class" in raised.value.recovery
+
+
+def test_ambiguous_same_class_actions_list_each_name_class_pair():
+    with pytest.raises(FijiError) as raised:
+        minimal._resolve_command(
+            [
+                {
+                    "name": "Smooth",
+                    "class_name": "ij.plugin.filter.Filters",
+                    "family": "imagej1",
+                    "_legacy_descriptor": 'ij.plugin.filter.Filters("smooth")',
+                },
+                {
+                    "name": "SMOOTH",
+                    "class_name": "ij.plugin.filter.Filters",
+                    "family": "imagej1",
+                    "_legacy_descriptor": 'ij.plugin.filter.Filters("sharpen")',
+                },
+            ],
+            "smooth",
+        )
+
+    message = str(raised.value)
+    assert "Smooth (ij.plugin.filter.Filters)" in message
+    assert "SMOOTH (ij.plugin.filter.Filters)" in message
 
 
 def test_missing_command_is_deterministic():

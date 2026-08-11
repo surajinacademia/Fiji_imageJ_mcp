@@ -322,6 +322,29 @@ def save_image(path: str) -> dict[str, Any]:
 _COMMAND_LIMIT_MIN = 1
 _COMMAND_LIMIT_MAX = 100
 _LOG_TAIL_CHARS = 4_000
+_JSON_PARAMETER_TYPES = frozenset(
+    {
+        "boolean",
+        "byte",
+        "short",
+        "int",
+        "long",
+        "float",
+        "double",
+        "char",
+        "java.lang.Boolean",
+        "java.lang.Byte",
+        "java.lang.Short",
+        "java.lang.Integer",
+        "java.lang.Long",
+        "java.lang.Float",
+        "java.lang.Double",
+        "java.lang.Character",
+        "java.lang.String",
+        "java.io.File",
+        "java.nio.file.Path",
+    }
+)
 
 
 def _command_text(value: Any) -> str:
@@ -329,15 +352,29 @@ def _command_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
-def _command_sort_key(command: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+def _legacy_descriptor(command: dict[str, Any]) -> str:
+    descriptor = command.get("_legacy_descriptor")
+    return (
+        _command_text(descriptor)
+        if descriptor is not None
+        else _command_text(command.get("class_name"))
+    )
+
+
+def _command_sort_key(
+    command: dict[str, Any],
+) -> tuple[str, str, str, str, str, str, str, str]:
     name = _command_text(command.get("name"))
     class_name = _command_text(command.get("class_name"))
+    descriptor = _legacy_descriptor(command)
     menu_path = _command_text(command.get("menu_path"))
     return (
         name.casefold(),
         name,
         class_name.casefold(),
         class_name,
+        descriptor.casefold(),
+        descriptor,
         menu_path.casefold(),
         menu_path,
     )
@@ -369,45 +406,117 @@ def _input_type_name(item: Any) -> str:
     return _command_text(get_name() if callable(get_name) else input_type)
 
 
-def _scijava_input_metadata(command_info: Any) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": _command_text(item.getName()),
-            "type": _input_type_name(item),
-            "required": bool(item.isRequired()),
-            "description": _command_text(item.getDescription()),
-        }
-        for item in command_info.inputs()
-    ]
+def _is_autofilled(item: Any) -> bool:
+    try:
+        is_auto_fill = getattr(item, "isAutoFill", None)
+        return bool(is_auto_fill()) if callable(is_auto_fill) else False
+    except Exception:
+        return False
+
+
+def _scijava_metadata_and_route(
+    command_info: Any,
+) -> tuple[list[dict[str, Any]], str]:
+    inputs: list[dict[str, Any]] = []
+    route = "structured_parameters"
+    for item in command_info.inputs():
+        input_type = _input_type_name(item)
+        required = bool(item.isRequired())
+        inputs.append(
+            {
+                "name": _command_text(item.getName()),
+                "type": input_type,
+                "required": required,
+                "description": _command_text(item.getDescription()),
+            }
+        )
+        if (
+            required
+            and not _is_autofilled(item)
+            and input_type not in _JSON_PARAMETER_TYPES
+        ):
+            route = "script_fallback"
+    return inputs, route
+
+
+def _scijava_menu_path(command_info: Any) -> str:
+    try:
+        get_menu_path = getattr(command_info, "getMenuPath", None)
+        if not callable(get_menu_path):
+            return ""
+        menu_path = get_menu_path()
+        if menu_path is None:
+            return ""
+        if isinstance(menu_path, str):
+            return _command_text(menu_path)
+        get_menu_string = getattr(menu_path, "getMenuString", None)
+        return _command_text(get_menu_string()) if callable(get_menu_string) else ""
+    except Exception:
+        return ""
+
+
+def _parse_legacy_descriptor(value: Any) -> tuple[str, str]:
+    """Split a menu descriptor's delegate class without inspecting arguments."""
+    descriptor = "" if value is None else str(value)
+    class_name = descriptor.strip().split("(", maxsplit=1)[0].strip()
+    return class_name, descriptor
+
+
+def _is_plain_legacy_delegate(command: dict[str, Any]) -> bool:
+    class_name = _command_text(command.get("class_name"))
+    return bool(class_name) and _legacy_descriptor(command) == class_name
+
+
+def _legacy_action_identity(command: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        _command_text(command.get("name")),
+        _command_text(command.get("class_name")),
+        _legacy_descriptor(command),
+    )
 
 
 def _deduplicate_commands(commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Prefer SciJava records for a shared non-empty delegate class."""
-    deduplicated: list[dict[str, Any]] = []
-    class_indexes: dict[str, int] = {}
+    """Prefer matching SciJava commands without collapsing legacy actions."""
+    scijava_by_class: dict[str, dict[str, Any]] = {}
     for command in commands:
         class_name = _command_text(command.get("class_name"))
-        if not class_name:
+        if command.get("family") != "scijava" or not class_name:
+            continue
+        existing = scijava_by_class.get(class_name)
+        if existing is None or _command_sort_key(command) < _command_sort_key(existing):
+            scijava_by_class[class_name] = command
+
+    deduplicated: list[dict[str, Any]] = []
+    seen_scijava_classes: set[str] = set()
+    seen_legacy_actions: set[tuple[str, str, str]] = set()
+    for command in commands:
+        class_name = _command_text(command.get("class_name"))
+        family = command.get("family")
+        if family == "scijava" and class_name:
+            if class_name in seen_scijava_classes:
+                continue
+            seen_scijava_classes.add(class_name)
+            deduplicated.append(scijava_by_class[class_name])
+            continue
+
+        if family != "imagej1" or not class_name:
             deduplicated.append(command)
             continue
 
-        existing_index = class_indexes.get(class_name)
-        if existing_index is None:
-            class_indexes[class_name] = len(deduplicated)
-            deduplicated.append(command)
+        matching_scijava = scijava_by_class.get(class_name)
+        if (
+            matching_scijava is not None
+            and _is_plain_legacy_delegate(command)
+            and _command_text(matching_scijava.get("name"))
+            == _command_text(command.get("name"))
+        ):
             continue
 
-        existing = deduplicated[existing_index]
-        candidate_key = (
-            0 if command.get("family") == "scijava" else 1,
-            _command_sort_key(command),
-        )
-        existing_key = (
-            0 if existing.get("family") == "scijava" else 1,
-            _command_sort_key(existing),
-        )
-        if candidate_key < existing_key:
-            deduplicated[existing_index] = command
+        identity = _legacy_action_identity(command)
+        if identity in seen_legacy_actions:
+            continue
+        seen_legacy_actions.add(identity)
+        deduplicated.append(command)
 
     return sorted(deduplicated, key=_command_sort_key)
 
@@ -418,14 +527,15 @@ def _collect_commands(ij: Any) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
     for command_info in service.getCommands():
         name = _command_text(command_info.getTitle())
+        inputs, route = _scijava_metadata_and_route(command_info)
         commands.append(
             {
                 "name": name,
                 "class_name": _command_text(command_info.getDelegateClassName()),
-                "menu_path": _command_text(command_info.getMenuPath()),
+                "menu_path": _scijava_menu_path(command_info),
                 "family": "scijava",
-                "invocation_route": "structured_parameters",
-                "inputs": _scijava_input_metadata(command_info),
+                "invocation_route": route,
+                "inputs": inputs,
                 "_command_info": command_info,
                 "_command_service": service,
             }
@@ -433,14 +543,16 @@ def _collect_commands(ij: Any) -> list[dict[str, Any]]:
 
     for entry in _imagej1_menus().getCommands().entrySet():
         name = _command_text(entry.getKey())
+        class_name, descriptor = _parse_legacy_descriptor(entry.getValue())
         commands.append(
             {
                 "name": name,
-                "class_name": _command_text(entry.getValue()),
+                "class_name": class_name,
                 "menu_path": "",
                 "family": "imagej1",
                 "invocation_route": ("legacy_options" if name else "script_fallback"),
                 "inputs": [],
+                "_legacy_descriptor": descriptor,
             }
         )
     return _deduplicate_commands(commands)
@@ -448,21 +560,30 @@ def _collect_commands(ij: Any) -> list[dict[str, Any]]:
 
 def _command_candidates_text(commands: list[dict[str, Any]]) -> str:
     candidates = sorted(
-        {
-            _command_text(command.get("class_name"))
-            or _command_text(command.get("name"))
-            or "<unnamed command>"
+        [
+            (
+                _command_text(command.get("name")) or "<unnamed command>",
+                _command_text(command.get("class_name")) or "<no delegate class>",
+                _legacy_descriptor(command),
+            )
             for command in commands
-        },
-        key=lambda candidate: (candidate.casefold(), candidate),
+        ],
+        key=lambda candidate: (
+            candidate[0].casefold(),
+            candidate[1].casefold(),
+            candidate[0],
+            candidate[1],
+            candidate[2].casefold(),
+            candidate[2],
+        ),
     )
-    return ", ".join(candidates)
+    return ", ".join(f"{name} ({class_name})" for name, class_name, _ in candidates)
 
 
 def _ambiguous_command(name: str, candidates: list[dict[str, Any]]) -> FijiError:
     return _failed(
         "ambiguous_command",
-        f"Command '{name}' is ambiguous. Candidate classes: "
+        f"Command '{name}' is ambiguous. Candidate commands: "
         f"{_command_candidates_text(candidates)}.",
         "Use an exact delegate class from search_commands and retry.",
     )
