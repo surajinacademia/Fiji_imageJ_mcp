@@ -972,6 +972,13 @@ def _dead_jvm_error(outcome: Outcome) -> FijiError:
     )
 
 
+def _raise_if_jvm_failed(error: BaseException, ij: Any, outcome: Outcome) -> None:
+    if _LIFECYCLE is Lifecycle.READY and _jvm_is_healthy(ij):
+        return
+    _mark_jvm_failed()
+    raise _dead_jvm_error(outcome) from error
+
+
 def _translate(error: BaseException, operation: str, outcome: Outcome) -> FijiError:
     if isinstance(error, FijiError):
         return error
@@ -1003,20 +1010,17 @@ def _translate(error: BaseException, operation: str, outcome: Outcome) -> FijiEr
 def _run_read_phase(operation: str, ij: Any, function: Callable[[Any], T]) -> T:
     try:
         return function(ij)
-    except FijiError:
+    except FijiError as error:
+        _raise_if_jvm_failed(error, ij, Outcome.FAILED)
         raise
     except Exception as first:
-        if _LIFECYCLE is not Lifecycle.READY or not _jvm_is_healthy(ij):
-            _mark_jvm_failed()
-            raise _dead_jvm_error(Outcome.FAILED) from first
+        _raise_if_jvm_failed(first, ij, Outcome.FAILED)
         if not _is_allowlisted_read_retry(first):
             raise _translate(first, operation, Outcome.FAILED) from first
         try:
             return function(ij)
         except Exception as second:
-            if not _jvm_is_healthy(ij):
-                _mark_jvm_failed()
-                raise _dead_jvm_error(Outcome.FAILED) from second
+            _raise_if_jvm_failed(second, ij, Outcome.FAILED)
             raise _translate(second, operation, Outcome.FAILED) from second
 
 
@@ -1040,12 +1044,11 @@ def run_mutation(
             raise
         try:
             return dispatch(ij, prepared)
-        except FijiError:
+        except FijiError as error:
+            _raise_if_jvm_failed(error, ij, Outcome.UNKNOWN)
             raise
         except Exception as error:
-            if not _jvm_is_healthy(ij):
-                _mark_jvm_failed()
-                raise _dead_jvm_error(Outcome.UNKNOWN) from error
+            _raise_if_jvm_failed(error, ij, Outcome.UNKNOWN)
             raise _translate(error, operation, Outcome.UNKNOWN) from error
 
 

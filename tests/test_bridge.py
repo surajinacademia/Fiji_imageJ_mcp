@@ -412,6 +412,162 @@ def test_dead_jvm_disables_retry_and_requires_restart(monkeypatch):
     assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
 
 
+class _JavaFacingGateway:
+    def __init__(self, *, fails: bool) -> None:
+        self.calls = 0
+        self.fails = fails
+
+    def inspect(self) -> None:
+        self.calls += 1
+        if self.fails:
+            raise RuntimeError("Java bridge call failed")
+
+
+def _fiji_error_after_java_failure(
+    ij: _JavaFacingGateway, error: bridge.FijiError
+) -> None:
+    try:
+        ij.inspect()
+    except RuntimeError as cause:
+        raise error from cause
+
+
+def _business_error() -> bridge.FijiError:
+    return bridge.FijiError(
+        "render_failed",
+        "The Fiji image could not be rendered.",
+        retryable=False,
+        outcome=bridge.Outcome.FAILED,
+        recovery="Select a valid image and retry.",
+    )
+
+
+def test_dead_jvm_wrapped_fiji_error_marks_read_terminal(monkeypatch):
+    gateway = _JavaFacingGateway(fails=True)
+    bridge._reset_runtime_for_tests(ready_ij=gateway)
+    health_probes = 0
+
+    def unhealthy(_ij):
+        nonlocal health_probes
+        health_probes += 1
+        return False
+
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", unhealthy)
+    original = _business_error()
+    try:
+        assert bridge.runtime_snapshot()["lifecycle"] == "READY"
+        with pytest.raises(bridge.FijiError) as raised:
+            bridge.run_read(
+                "render_active_image",
+                lambda ij: _fiji_error_after_java_failure(ij, original),
+            )
+        assert raised.value.code == "jvm_failed"
+        assert raised.value.outcome is bridge.Outcome.FAILED
+        assert raised.value.__cause__ is original
+        assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
+        assert gateway.calls == 1
+        assert health_probes == 1
+    finally:
+        bridge._reset_runtime_for_tests()
+
+
+def test_dead_jvm_wrapped_fiji_error_before_dispatch_is_failed(monkeypatch):
+    gateway = _JavaFacingGateway(fails=True)
+    bridge._reset_runtime_for_tests(ready_ij=gateway)
+    health_probes = 0
+    dispatched = 0
+
+    def unhealthy(_ij):
+        nonlocal health_probes
+        health_probes += 1
+        return False
+
+    def dispatch(_ij, _prepared):
+        nonlocal dispatched
+        dispatched += 1
+
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", unhealthy)
+    try:
+        with pytest.raises(bridge.FijiError) as raised:
+            bridge.run_mutation(
+                "save_image",
+                lambda ij: _fiji_error_after_java_failure(ij, _business_error()),
+                dispatch,
+            )
+        assert raised.value.code == "jvm_failed"
+        assert raised.value.outcome is bridge.Outcome.FAILED
+        assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
+        assert dispatched == 0
+        assert gateway.calls == 1
+        assert health_probes == 1
+    finally:
+        bridge._reset_runtime_for_tests()
+
+
+def test_dead_jvm_wrapped_fiji_error_after_dispatch_is_unknown(monkeypatch):
+    gateway = _JavaFacingGateway(fails=True)
+    bridge._reset_runtime_for_tests(ready_ij=gateway)
+    health_probes = 0
+    dispatched = 0
+
+    def unhealthy(_ij):
+        nonlocal health_probes
+        health_probes += 1
+        return False
+
+    def dispatch(ij, _prepared):
+        nonlocal dispatched
+        dispatched += 1
+        _fiji_error_after_java_failure(ij, _business_error())
+
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", unhealthy)
+    try:
+        with pytest.raises(bridge.FijiError) as raised:
+            bridge.run_mutation("save_image", lambda _ij: None, dispatch)
+        assert raised.value.code == "jvm_failed"
+        assert raised.value.outcome is bridge.Outcome.UNKNOWN
+        assert bridge.runtime_snapshot()["lifecycle"] == "FAILED"
+        assert dispatched == 1
+        assert gateway.calls == 1
+        assert health_probes == 1
+    finally:
+        bridge._reset_runtime_for_tests()
+
+
+def test_healthy_business_fiji_error_after_dispatch_is_preserved(monkeypatch):
+    gateway = _JavaFacingGateway(fails=False)
+    bridge._reset_runtime_for_tests(ready_ij=gateway)
+    health_probes = 0
+    dispatched = 0
+    original = _business_error()
+
+    def healthy(_ij):
+        nonlocal health_probes
+        health_probes += 1
+        return True
+
+    def business_failure_after_java_call(ij):
+        ij.inspect()
+        raise original
+
+    def dispatch(ij, _prepared):
+        nonlocal dispatched
+        dispatched += 1
+        business_failure_after_java_call(ij)
+
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", healthy)
+    try:
+        with pytest.raises(bridge.FijiError) as raised:
+            bridge.run_mutation("save_image", lambda _ij: None, dispatch)
+        assert raised.value is original
+        assert bridge.runtime_snapshot()["lifecycle"] == "READY"
+        assert dispatched == 1
+        assert gateway.calls == 1
+        assert health_probes == 1
+    finally:
+        bridge._reset_runtime_for_tests()
+
+
 def test_pre_dispatch_failure_is_definitely_failed(monkeypatch):
     bridge._reset_runtime_for_tests(ready_ij=object())
     monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
