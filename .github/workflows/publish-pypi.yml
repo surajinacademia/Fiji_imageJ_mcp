@@ -25,7 +25,7 @@ jobs:
           cache: pip
 
       - name: Install distribution validators
-        run: python -m pip install --upgrade pip build twine
+        run: python -m pip install --upgrade pip build twine "fastmcp>=2.10.3"
 
       - name: Build and validate distribution
         run: |

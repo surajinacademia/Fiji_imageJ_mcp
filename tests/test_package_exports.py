@@ -52,3 +52,16 @@ def test_runtime_dependencies_are_minimal():
     assert project["project"]["scripts"] == {
         "fiji-mcp-server": "fiji_mcp.__main__:main"
     }
+
+
+def test_publish_workflow_provisions_wheel_smoke_client_dependency() -> None:
+    workflow = Path(".github/workflows/publish-pypi.yml").read_text()
+    validator_install = next(
+        line.strip()
+        for line in workflow.splitlines()
+        if line.strip().startswith("run: python -m pip install --upgrade")
+    )
+
+    assert validator_install == (
+        'run: python -m pip install --upgrade pip build twine "fastmcp>=2.10.3"'
+    )
