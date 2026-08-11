@@ -78,10 +78,15 @@ non-negative; `limit` must be from 1 through 5,000. The response has original
 `columns`, ordered-array `rows`, `offset`, `returned`, and `total_rows`.
 
 Rows deliberately remain arrays so duplicate or blank ImageJ column headings
-are preserved. Finite numeric cells are JSON numbers, text cells are strings,
-missing values are `null`, and non-finite numeric values become `"NaN"`,
-`"Infinity"`, or `"-Infinity"`. Page through this tool for complete data;
-rendered Results screenshots show only the first 100 rows.
+are preserved. `null` is reserved for undefined ImageJ column slots
+(`columnExists(index) == false`). Defined cells reflect the ResultsTable:
+finite numeric cells are JSON numbers, stored text cells are strings (including
+possible empty-string placeholders), and numeric infinities become
+`"Infinity"` or `"-Infinity"`. Numeric `NaN` and NaN-encoded empty numeric
+slots both become `"NaN"`, because the public API cannot distinguish them.
+With NaN-empty disabled, empty numeric slots surface as `0`. Page through this
+tool for complete data; rendered Results screenshots show only the first 100
+rows.
 
 ## `screenshot(target: Literal["active_image", "results"], save_path: str | None = None)`
 

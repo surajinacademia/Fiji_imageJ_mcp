@@ -84,22 +84,10 @@ def _results_table(ij: Any) -> Any:
 
 
 def _result_cell(results_table: Any, column: int, row: int) -> Any:
-    try:
-        value = results_table.getValueAsDouble(column, row)
-    except Exception:
-        return None
-    if value is None or isinstance(value, str):
-        return value
-
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return to_jsonable(value)
+    value = results_table.getValueAsDouble(column, row)
+    numeric = float(value)
     if math.isnan(numeric):
-        try:
-            text_value = results_table.getStringValue(column, row)
-        except Exception:
-            text_value = None
+        text_value = results_table.getStringValue(column, row)
         if text_value is not None and str(text_value) != "NaN":
             return str(text_value)
     return to_jsonable(value)
@@ -119,15 +107,18 @@ def _read_results(ij: Any, offset: int, limit: int) -> dict[str, Any]:
 
     total_rows = int(results_table.size())
     column_count = max(int(results_table.getLastColumn()) + 1, 0)
-    columns = [
-        ""
-        if (heading := results_table.getColumnHeading(column)) is None
-        else str(heading)
-        for column in range(column_count)
-    ]
+    columns: list[str] = []
+    defined_columns: list[bool] = []
+    for column in range(column_count):
+        heading = results_table.getColumnHeading(column)
+        columns.append("" if heading is None else str(heading))
+        defined_columns.append(bool(results_table.columnExists(column)))
     stop = min(total_rows, offset + limit)
     rows = [
-        [_result_cell(results_table, column, row) for column in range(column_count)]
+        [
+            _result_cell(results_table, column, row) if defined else None
+            for column, defined in enumerate(defined_columns)
+        ]
         for row in range(offset, stop)
     ]
     return {

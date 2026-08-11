@@ -59,10 +59,23 @@ class FakeIJ:
 
 
 class FakeResultsTable:
-    def __init__(self, headings: list[str], rows: list[list[object]]) -> None:
+    def __init__(
+        self,
+        headings: list[str],
+        rows: list[list[object]],
+        *,
+        defined_columns: list[bool] | None = None,
+    ) -> None:
         self._headings = headings
         self._rows = rows
+        self._defined_columns = (
+            [True] * len(headings) if defined_columns is None else list(defined_columns)
+        )
+        if len(self._defined_columns) != len(headings):
+            raise ValueError("defined_columns must align with headings")
+        self.column_exists_calls: list[int] = []
         self.requested_cells: list[tuple[int, int]] = []
+        self.requested_string_cells: list[tuple[int, int]] = []
 
     def getLastColumn(self) -> int:
         return len(self._headings) - 1
@@ -70,13 +83,19 @@ class FakeResultsTable:
     def getColumnHeading(self, column: int) -> str:
         return self._headings[column]
 
-    def getStringValue(self, column: int, row: int) -> str | None:
-        value = self._rows[row][column]
-        return value if isinstance(value, str) else None
+    def columnExists(self, column: int) -> bool:
+        self.column_exists_calls.append(column)
+        return self._defined_columns[column]
 
-    def getValueAsDouble(self, column: int, row: int) -> object:
+    def getValueAsDouble(self, column: int, row: int) -> float:
         self.requested_cells.append((column, row))
-        return self._rows[row][column]
+        value = self._rows[row][column]
+        return float("nan") if value is None or isinstance(value, str) else float(value)
+
+    def getStringValue(self, column: int, row: int) -> str:
+        self.requested_string_cells.append((column, row))
+        value = self._rows[row][column]
+        return value if isinstance(value, str) else "NaN"
 
     def size(self) -> int:
         return len(self._rows)

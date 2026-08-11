@@ -545,3 +545,75 @@ def test_post_dispatch_probe_is_once_and_unknown() -> None:
     assert record["changed_pixels"] > 0
     assert record["error"]["code"] == "unknown_outcome"
     assert record["error"]["outcome"] == bridge.Outcome.UNKNOWN.value
+
+
+@pytest.mark.integration
+@pytest.mark.timeout(300)
+def test_results_table_probe_preserves_defined_column_semantics() -> None:
+    """Use a disposable Fiji process so Results-table state cannot leak."""
+    root = _fiji_root()
+    record = _run_probe(
+        textwrap.dedent(
+            """
+            import json
+            from fiji_mcp import bridge, tools
+
+            ij = bridge.get_ij()
+            table = ij.ResultsTable.getResultsTable()
+
+            def populate(nan_empty):
+                table.reset()
+                table.setNaNEmptyCells(nan_empty)
+                table.incrementCounter()
+                table.addValue("present", 1.0)
+                table.addValue("asymmetric", 2.0)
+                table.setValue("explicit_nan", 0, float("nan"))
+                table.setValue("text", 0, "hello")
+                table.setValue(6, 0, 6.0)
+                table.incrementCounter()
+                table.addValue("present", 3.0)
+                table.setValue("text", 1, "")
+                return tools.get_results()
+
+            try:
+                nan_empty = populate(True)
+                zero_empty = populate(False)
+                expected_columns = [
+                    "present",
+                    "asymmetric",
+                    "explicit_nan",
+                    "text",
+                    "",
+                    "",
+                    "C7",
+                ]
+                assert nan_empty["columns"] == expected_columns
+                assert nan_empty["rows"] == [
+                    [1.0, 2.0, "NaN", "hello", None, None, 6.0],
+                    [3.0, "NaN", "NaN", "", None, None, "NaN"],
+                ]
+                assert zero_empty["columns"] == expected_columns
+                assert zero_empty["rows"] == [
+                    [1.0, 2.0, "NaN", "hello", None, None, 6.0],
+                    [3.0, 0.0, 0.0, "", None, None, 0.0],
+                ]
+                record = {"nan_empty": nan_empty, "zero_empty": zero_empty}
+            finally:
+                table.reset()
+
+            print(json.dumps(record, sort_keys=True, allow_nan=False))
+            """
+        ),
+        root,
+    )
+
+    assert record["nan_empty"]["rows"][1] == [
+        3.0,
+        "NaN",
+        "NaN",
+        "",
+        None,
+        None,
+        "NaN",
+    ]
+    assert record["zero_empty"]["rows"][1] == [3.0, 0.0, 0.0, "", None, None, 0.0]

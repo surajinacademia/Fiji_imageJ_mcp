@@ -159,7 +159,7 @@ Pagination prevents large particle-analysis tables from consuming the agent's en
 
 `offset` must be non-negative and `limit` must be between 1 and 5,000.
 
-Finite numeric cells remain JSON numbers, text cells remain strings, missing cells become `null`, and non-finite numeric values become the strings `"NaN"`, `"Infinity"`, or `"-Infinity"`. Returning ordered arrays preserves blank or duplicate ImageJ headings without inventing dictionary keys. Row order is the live Results-table order.
+`null` is reserved for undefined ImageJ column slots (`columnExists(index) == false`). Defined cells reflect the ResultsTable: finite numeric cells remain JSON numbers, stored text remains strings (including possible empty-string placeholders), and numeric infinities become `"Infinity"` or `"-Infinity"`. Numeric `NaN` and NaN-encoded empty numeric slots both become `"NaN"`, because the public API cannot distinguish them. With NaN-empty disabled, empty numeric slots surface as `0`. Returning ordered arrays preserves blank or duplicate ImageJ headings without inventing dictionary keys. Row order is the live Results-table order.
 
 ### 6.8 `screenshot(target, save_path=None)`
 
@@ -270,7 +270,7 @@ The direct runtime dependency list is FastMCP, PyImageJ, Pillow, and NumPy. The 
 - Fiji-path and mode validation.
 - Command search merging and bounded results.
 - Duplicate command-name resolution and registry deduplication.
-- Results-table pagination, ordering, duplicate/blank headings, missing cells, and non-finite values.
+- Results-table pagination, ordering, duplicate/blank headings, defined-column gaps, and non-finite values.
 - Bounded Java-object serialization, non-string map keys, cycles, and truncation.
 - Error translation and known/unknown execution outcomes.
 - Lifecycle/dispatch phase transitions, safe retry classification, health probing, and maximum attempt count.

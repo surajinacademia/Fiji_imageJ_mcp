@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from fiji_mcp import bridge
 from fiji_mcp import tools as minimal
 from fiji_mcp.bridge import FijiError, Outcome, Settings
 
@@ -60,9 +61,23 @@ class FakeImage:
 
 
 class FakeResultsTable:
-    def __init__(self, headings: list[str], rows: list[list[object]]) -> None:
+    def __init__(
+        self,
+        headings: list[str],
+        rows: list[list[object]],
+        *,
+        defined_columns: list[bool] | None = None,
+    ) -> None:
         self._headings = headings
         self._rows = rows
+        self._defined_columns = (
+            [True] * len(headings) if defined_columns is None else list(defined_columns)
+        )
+        if len(self._defined_columns) != len(headings):
+            raise ValueError("defined_columns must align with headings")
+        self.column_exists_calls: list[int] = []
+        self.requested_cells: list[tuple[int, int]] = []
+        self.requested_string_cells: list[tuple[int, int]] = []
 
     def getLastColumn(self) -> int:
         return len(self._headings) - 1
@@ -70,12 +85,19 @@ class FakeResultsTable:
     def getColumnHeading(self, column: int) -> str:
         return self._headings[column]
 
-    def getValueAsDouble(self, column: int, row: int) -> object:
-        return self._rows[row][column]
+    def columnExists(self, column: int) -> bool:
+        self.column_exists_calls.append(column)
+        return self._defined_columns[column]
 
-    def getStringValue(self, column: int, row: int) -> str | None:
+    def getValueAsDouble(self, column: int, row: int) -> float:
+        self.requested_cells.append((column, row))
         value = self._rows[row][column]
-        return value if isinstance(value, str) else None
+        return float("nan") if value is None or isinstance(value, str) else float(value)
+
+    def getStringValue(self, column: int, row: int) -> str:
+        self.requested_string_cells.append((column, row))
+        value = self._rows[row][column]
+        return value if isinstance(value, str) else "NaN"
 
     def size(self) -> int:
         return len(self._rows)
@@ -179,13 +201,131 @@ def test_get_results_preserves_heading_and_row_order(monkeypatch):
 
     assert result["columns"] == ["Area", "", "Area"]
     assert result["rows"] == [
-        [1.5, None, "NaN"],
+        [1.5, "NaN", "NaN"],
         [2.5, "cell", "Infinity"],
         [3.5, "tail", "-Infinity"],
     ]
     assert result["offset"] == 0
     assert result["returned"] == 3
     assert result["total_rows"] == 3
+
+
+def test_get_results_preserves_defined_results_table_cell_conventions(monkeypatch):
+    fake = FakeResultsTable(
+        headings=["asymmetric", "explicit_nan", "text", "empty", "plus", "minus"],
+        rows=[
+            [1.25, float("nan"), "stored text", "", float("inf"), float("-inf")],
+            [None, 2.5, "tail", "", float("inf"), float("-inf")],
+        ],
+    )
+    monkeypatch.setattr(minimal, "_results_table", lambda _ij: fake)
+    monkeypatch.setattr(minimal, "run_read", _direct_read)
+
+    result = minimal.get_results()
+
+    assert result["rows"] == [
+        [1.25, "NaN", "stored text", "", "Infinity", "-Infinity"],
+        ["NaN", 2.5, "tail", "", "Infinity", "-Infinity"],
+    ]
+
+
+def test_get_results_skips_undefined_column_slots_without_cell_access(monkeypatch):
+    fake = FakeResultsTable(
+        headings=["Area", "", "Mean"],
+        rows=[[1.0, "must not access", 3.0], [2.0, "must not access", 4.0]],
+        defined_columns=[True, False, True],
+    )
+    monkeypatch.setattr(minimal, "_results_table", lambda _ij: fake)
+    monkeypatch.setattr(minimal, "run_read", _direct_read)
+
+    result = minimal.get_results()
+
+    assert result["rows"] == [[1.0, None, 3.0], [2.0, None, 4.0]]
+    assert fake.column_exists_calls == [0, 1, 2]
+    assert fake.requested_cells == [(0, 0), (2, 0), (0, 1), (2, 1)]
+    assert fake.requested_string_cells == []
+
+
+def test_get_results_propagates_numeric_accessor_errors(monkeypatch):
+    fake = FakeResultsTable(headings=["Area"], rows=[[1.0]])
+    monkeypatch.setattr(minimal, "_results_table", lambda _ij: fake)
+    monkeypatch.setattr(minimal, "run_read", _direct_read)
+
+    def fail_numeric(_column: int, _row: int) -> float:
+        raise RuntimeError("numeric accessor failed")
+
+    monkeypatch.setattr(fake, "getValueAsDouble", fail_numeric)
+
+    with pytest.raises(RuntimeError, match="numeric accessor failed"):
+        minimal.get_results()
+
+
+def test_get_results_propagates_string_accessor_errors(monkeypatch):
+    fake = FakeResultsTable(headings=["Label"], rows=[["stored text"]])
+    monkeypatch.setattr(minimal, "_results_table", lambda _ij: fake)
+    monkeypatch.setattr(minimal, "run_read", _direct_read)
+
+    def fail_string(_column: int, _row: int) -> str:
+        raise RuntimeError("string accessor failed")
+
+    monkeypatch.setattr(fake, "getStringValue", fail_string)
+
+    with pytest.raises(RuntimeError, match="string accessor failed"):
+        minimal.get_results()
+
+
+def test_get_results_retries_whole_page_for_exact_concurrent_modification(monkeypatch):
+    fake = FakeResultsTable(headings=["Area", "Mean"], rows=[[1.0, 2.0], [3.0, 4.0]])
+    concurrent_modification = type(
+        "ConcurrentModificationException",
+        (Exception,),
+        {"__module__": "java.util"},
+    )
+    attempts = 0
+    original_value = fake.getValueAsDouble
+
+    def concurrent_once(column: int, row: int) -> float:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise concurrent_modification()
+        return original_value(column, row)
+
+    monkeypatch.setattr(fake, "getValueAsDouble", concurrent_once)
+    bridge._reset_runtime_for_tests(ready_ij=FakeIJ(results=fake))
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    try:
+        result = minimal.get_results()
+    finally:
+        bridge._reset_runtime_for_tests()
+
+    assert result["rows"] == [[1.0, 2.0], [3.0, 4.0]]
+    assert all(cell is not None for row in result["rows"] for cell in row)
+    assert attempts == 5
+    assert fake.column_exists_calls == [0, 1, 0, 1]
+
+
+def test_get_results_translates_nonallowlisted_accessor_errors(monkeypatch):
+    fake = FakeResultsTable(headings=["Area"], rows=[[1.0]])
+    attempts = 0
+
+    def fail_numeric(_column: int, _row: int) -> float:
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("unexpected numeric accessor failure")
+
+    monkeypatch.setattr(fake, "getValueAsDouble", fail_numeric)
+    bridge._reset_runtime_for_tests(ready_ij=FakeIJ(results=fake))
+    monkeypatch.setattr(bridge, "_jvm_is_healthy", lambda _ij: True)
+    try:
+        with pytest.raises(FijiError) as raised:
+            minimal.get_results()
+    finally:
+        bridge._reset_runtime_for_tests()
+
+    assert attempts == 1
+    assert raised.value.code == "java_bridge_failure"
+    assert raised.value.outcome is Outcome.FAILED
 
 
 def test_get_results_returns_a_partial_nonzero_page(monkeypatch):
