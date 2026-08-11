@@ -172,10 +172,13 @@ stdio JSON-RPC. Plugins that require GUI dialogs, mouse/keyboard automation, or
 unscriptable interaction may fail in headless mode. Use `FIJI_MODE=gui` only for
 an intentional local desktop workflow supported by that plugin.
 
-`save_image` is strict: its requested suffix must be one of the exact lowercase
-formats documented in the tool reference, and an existing output is rejected.
-`screenshot` and `compare_screenshots` overwrite an existing `save_path`; use
-a new path when preserving an existing PNG is required. After any mutation with
+`save_image` is strict within this MCP server process: its requested suffix must
+be one of the exact lowercase formats documented in the tool reference, and an
+output that exists when the serialized save begins is rejected. It is not a
+cross-process atomic publisher, so another local process can still race that
+check; use a dedicated output directory when other writers are active.
+`screenshot` and `compare_screenshots` overwrite an existing `save_path`; use a
+new path when preserving an existing PNG is required. After any mutation with
 an unknown outcome, inspect state or take a screenshot before deciding whether
 to retry.
 

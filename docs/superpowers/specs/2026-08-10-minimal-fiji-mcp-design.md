@@ -149,11 +149,13 @@ Saves the active image to the exact requested local path. Parent directories are
 created when missing. The only accepted suffixes are the exact lowercase list
 `.tif`, `.tiff`, `.jpg`, `.png`, `.gif`, `.bmp`, `.fits`, `.pgm`, `.zip`,
 `.raw`, and `.avi`. `.jpeg` and case variants are rejected because ImageJ
-rewrites those filename spellings. An existing exact output path is rejected, so
-the tool never overwrites a file. The response returns the exact resolved path
-and its extension without a leading dot as `format`. Because the server is an
-explicitly trusted local execution tool, it does not implement a separate path
-allowlist.
+rewrites those filename spellings. Within one MCP server process, an exact
+output that exists when the serialized save begins is rejected. The tool is not
+a cross-process atomic publisher; callers should use a dedicated output
+directory when another local process may create the same filename. The response
+returns the exact resolved path and its extension without a leading dot as
+`format`. Because the server is an explicitly trusted local execution tool, it
+does not implement a separate path allowlist.
 
 ### 6.7 `get_results(offset=0, limit=500)`
 

@@ -104,6 +104,12 @@ def _assert_release_workflow_security(workflow: dict[str, Any]) -> None:
         },
     }
 
+    trigger_keys = [key for key in ("on", True) if key in workflow]
+    assert len(trigger_keys) == 1
+    assert workflow[trigger_keys[0]] == {
+        "release": {"types": ["published"]},
+        "workflow_dispatch": None,
+    }
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["jobs"] == expected_jobs
 
@@ -193,6 +199,14 @@ def test_publish_workflow_rejects_extra_install_command() -> None:
         _assert_release_workflow_security(workflow)
 
 
+def test_publish_workflow_rejects_an_extra_trigger() -> None:
+    workflow = copy.deepcopy(_release_workflow())
+    workflow[True]["push"] = {"branches": ["main"]}
+
+    with pytest.raises(AssertionError):
+        _assert_release_workflow_security(workflow)
+
+
 def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
     readme = Path("README.md").read_text()
     json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
@@ -229,6 +243,8 @@ def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
     assert "The MCP client owns the stdio process" in readme
     assert "python -m pip install ." in readme
     assert "`save_image` is strict" in readme
+    assert "within this MCP server process" in readme
+    assert re.search(r"not a\s+cross-process atomic publisher", readme)
     assert (
         "`screenshot` and `compare_screenshots` overwrite an existing `save_path`"
         in readme
