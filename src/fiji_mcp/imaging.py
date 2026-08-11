@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ from fiji_mcp.bridge import FijiError, Outcome
 
 _MAX_DIMENSION = 2_048
 _MAX_RESULT_ROWS = 100
+_MAX_COMPARE_PIXELS = 16_777_216
+_METRIC_CHUNK_ROWS = 256
 _MARGIN = 8
 _PANEL_GAP = 12
 
@@ -99,25 +102,144 @@ def _buffered_image_to_pil(buffered_image: Any) -> Image.Image:
 
 
 def _duplicate_current_plane(image: Any, c: int, z: int, t: int) -> Any:
-    """Duplicate only the selected hyperstack plane, leaving the source untouched."""
+    """Build a detached, full-size current plane without touching the source ROI."""
     try:
-        import scyjava as sj
-
-        duplicator = sj.jimport("ij.plugin.Duplicator")
-        current_plane = duplicator().run(image, c, c, z, z, t, t)
+        source_processor = image.getProcessor()
+        processor = source_processor.duplicate()
+        color_model = source_processor.getColorModel()
+        if color_model is not None:
+            processor.setColorModel(color_model)
+        current_plane = image.createImagePlus()
+        current_plane.setProcessor(image.getTitle(), processor)
+        current_plane.setDisplayRange(
+            image.getDisplayRangeMin(), image.getDisplayRangeMax()
+        )
     except Exception as error:
         raise _failed(
             "render_failed",
-            "Could not duplicate the current C/Z/T plane for rendering.",
+            "Could not construct a detached current C/Z/T plane for rendering.",
             "Try selecting a valid active image and retry.",
         ) from error
     if current_plane is None:
         raise _failed(
             "render_failed",
-            "Fiji did not return a duplicate of the current C/Z/T plane.",
+            "Fiji did not return a detached current C/Z/T plane.",
             "Try selecting a valid active image and retry.",
         )
+
+    _copy_current_annotations(image, current_plane, c, z, t)
     return current_plane
+
+
+def _clone_roi(roi: Any) -> Any:
+    if roi is None:
+        return None
+    try:
+        clone = roi.clone()
+    except Exception as error:
+        raise _failed(
+            "render_failed",
+            "Could not clone the active ROI for rendering.",
+            "Try selecting a valid active image and retry.",
+        ) from error
+    if clone is None or clone is roi:
+        raise _failed(
+            "render_failed",
+            "Fiji did not return a detached active ROI for rendering.",
+            "Try selecting a valid active image and retry.",
+        )
+    return clone
+
+
+def _reset_one_plane_position(roi: Any) -> None:
+    try:
+        roi.setPosition(1, 1, 1)
+    except TypeError:
+        try:
+            roi.setPosition(1)
+        except Exception as error:
+            raise _failed(
+                "render_failed",
+                "Could not position a detached annotation for rendering.",
+                "Try selecting a valid active image and retry.",
+            ) from error
+    except Exception as error:
+        raise _failed(
+            "render_failed",
+            "Could not position a detached annotation for rendering.",
+            "Try selecting a valid active image and retry.",
+        ) from error
+
+
+def _filtered_overlay(overlay: Any, c: int, z: int, t: int) -> Any:
+    if overlay is None:
+        return None
+    try:
+        copied = overlay.duplicate()
+        if copied is None or copied is overlay:
+            raise _failed(
+                "render_failed",
+                "Fiji did not return a detached overlay for rendering.",
+                "Try selecting a valid active image and retry.",
+            )
+        cropped = copied.crop(c, c, z, z, t, t)
+        if cropped is not None:
+            if cropped is overlay:
+                raise _failed(
+                    "render_failed",
+                    "Fiji did not return a detached overlay for rendering.",
+                    "Try selecting a valid active image and retry.",
+                )
+            copied = cropped
+        for index in range(int(copied.size())):
+            _reset_one_plane_position(copied.get(index))
+    except FijiError:
+        raise
+    except Exception as error:
+        raise _failed(
+            "render_failed",
+            "Could not clone the visible overlay for rendering.",
+            "Try selecting a valid active image and retry.",
+        ) from error
+    if copied is None or copied is overlay:
+        raise _failed(
+            "render_failed",
+            "Fiji did not return a detached overlay for rendering.",
+            "Try selecting a valid active image and retry.",
+        )
+    return copied
+
+
+def _copy_current_annotations(
+    image: Any, detached: Any, c: int, z: int, t: int
+) -> None:
+    try:
+        overlay = _filtered_overlay(image.getOverlay(), c, z, t)
+        active_roi = _clone_roi(image.getRoi())
+    except FijiError:
+        raise
+    except Exception as error:
+        raise _failed(
+            "render_failed",
+            "Could not read the active annotations for rendering.",
+            "Try selecting a valid active image and retry.",
+        ) from error
+
+    if active_roi is not None:
+        _reset_one_plane_position(active_roi)
+    try:
+        if overlay is not None:
+            if active_roi is not None:
+                overlay.add(active_roi)
+            detached.setOverlay(overlay)
+        elif active_roi is not None:
+            detached.setRoi(active_roi)
+    except Exception as error:
+        raise _failed(
+            "render_failed",
+            "Could not attach detached annotations for rendering.",
+            "Try selecting a valid active image and retry.",
+        ) from error
 
 
 def _current_position(image: Any) -> tuple[int, int, int]:
@@ -301,16 +423,75 @@ def _resolve_image_path(path: str | Path, label: str) -> Path:
     return resolved
 
 
-def _open_rgb(path: Path) -> Image.Image:
+def _validate_image_header(path: Path, image: Image.Image) -> None:
     try:
-        with Image.open(path) as image:
-            return image.convert("RGB")
+        width, height = image.size
+        if width < 1 or height < 1:
+            raise ValueError("image dimensions must be positive")
+    except Exception as error:
+        raise _failed(
+            "unreadable_image",
+            f"Image has invalid dimensions: {path}",
+            "Provide a readable local raster image and retry.",
+        ) from error
+    if width * height > _MAX_COMPARE_PIXELS:
+        raise _failed(
+            "image_too_large",
+            f"Image exceeds the {_MAX_COMPARE_PIXELS:,}-pixel comparison limit: {path}",
+            "Use an image at or below the comparison pixel limit and retry.",
+        )
+
+
+def _open_image_header(path: Path) -> Image.Image:
+    try:
+        image = Image.open(path)
     except Exception as error:
         raise _failed(
             "unreadable_image",
             f"Could not read image: {path}",
             "Provide a readable local raster image and retry.",
         ) from error
+    try:
+        _validate_image_header(path, image)
+    except FijiError:
+        image.close()
+        raise
+    return image
+
+
+def _display_copy(image: Image.Image) -> Image.Image:
+    """Return a bounded display copy before panel composition."""
+    return fit_within(image, _MAX_DIMENSION)
+
+
+def _chunk_rgb(image: Image.Image, width: int, start: int, stop: int) -> np.ndarray:
+    return np.asarray(
+        image.crop((0, start, width, stop)).convert("RGB"), dtype=np.int16
+    )
+
+
+def _comparison_metrics(before: Image.Image, after: Image.Image) -> dict[str, float]:
+    width, height = before.size
+    total_absolute = 0
+    total_squared = 0
+    changed_pixels = 0
+
+    for start in range(0, height, _METRIC_CHUNK_ROWS):
+        stop = min(start + _METRIC_CHUNK_ROWS, height)
+        before_values = _chunk_rgb(before, width, start, stop)
+        after_values = _chunk_rgb(after, width, start, stop)
+        absolute = np.abs(before_values - after_values)
+        total_absolute += int(np.sum(absolute, dtype=np.uint64))
+        squared = absolute.astype(np.uint64)
+        total_squared += int(np.sum(squared * squared, dtype=np.uint64))
+        changed_pixels += int(np.count_nonzero(np.any(absolute > 0, axis=2)))
+
+    channels = width * height * 3
+    return {
+        "mae": total_absolute / (channels * 255.0),
+        "rmse": math.sqrt(total_squared / (channels * 255.0 * 255.0)),
+        "changed_pixel_fraction": changed_pixels / (width * height),
+    }
 
 
 def _labelled_panel(label: str, image: Image.Image) -> Image.Image:
@@ -353,28 +534,40 @@ def _comparison_metadata(
 
 
 def _absolute_difference(before: Image.Image, after: Image.Image) -> Image.Image:
-    before_values = np.asarray(before, dtype=np.int16)
-    after_values = np.asarray(after, dtype=np.int16)
+    before_values = np.asarray(before.convert("RGB"), dtype=np.int16)
+    after_values = np.asarray(after.convert("RGB"), dtype=np.int16)
     return Image.fromarray(np.abs(before_values - after_values).astype(np.uint8))
 
 
 def compare_paths(before_path: str | Path, after_path: str | Path) -> RenderedPNG:
     """Compare two local raster paths without contacting or initializing Fiji."""
-    before = _open_rgb(_resolve_image_path(before_path, "before"))
-    after = _open_rgb(_resolve_image_path(after_path, "after"))
-    metadata = _comparison_metadata(before, after, ["before", "after"])
-    panels: list[tuple[str, Image.Image]] = [("Before", before), ("After", after)]
+    before = _open_image_header(_resolve_image_path(before_path, "before"))
+    try:
+        after = _open_image_header(_resolve_image_path(after_path, "after"))
+    except Exception:
+        before.close()
+        raise
 
-    if before.size == after.size:
-        before_values = np.asarray(before, dtype=np.float64) / 255.0
-        after_values = np.asarray(after, dtype=np.float64) / 255.0
-        difference = np.abs(before_values - after_values)
-        metadata["mae"] = float(np.mean(difference))
-        metadata["rmse"] = float(np.sqrt(np.mean(np.square(difference))))
-        metadata["changed_pixel_fraction"] = float(
-            np.mean(np.any(difference > 0.0, axis=2))
-        )
-        metadata["panels"] = ["before", "after", "absolute_difference"]
-        panels.append(("Absolute difference", _absolute_difference(before, after)))
+    try:
+        metadata = _comparison_metadata(before, after, ["before", "after"])
+        before_display = _display_copy(before)
+        after_display = _display_copy(after)
+        panels: list[tuple[str, Image.Image]] = [
+            ("Before", before_display),
+            ("After", after_display),
+        ]
 
-    return _rendered_png(_compose_panels(panels), metadata)
+        if before.size == after.size:
+            metadata.update(_comparison_metrics(before, after))
+            metadata["panels"] = ["before", "after", "absolute_difference"]
+            panels.append(
+                (
+                    "Absolute difference",
+                    _absolute_difference(before_display, after_display),
+                )
+            )
+
+        return _rendered_png(_compose_panels(panels), metadata)
+    finally:
+        before.close()
+        after.close()

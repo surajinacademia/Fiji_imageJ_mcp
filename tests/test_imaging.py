@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import base64
 import io
+import struct
+import sys
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -124,6 +127,167 @@ class FakeCurrentPlane:
         return self.buffered_image
 
 
+class FakePlaneProcessor:
+    def __init__(self, width: int, height: int, color_model: object) -> None:
+        self.width = width
+        self.height = height
+        self.color_model = color_model
+        self.duplicate_calls = 0
+
+    def duplicate(self) -> FakePlaneProcessor:
+        self.duplicate_calls += 1
+        return FakePlaneProcessor(self.width, self.height, self.color_model)
+
+    def getColorModel(self) -> object:
+        return self.color_model
+
+    def setColorModel(self, color_model: object) -> None:
+        self.color_model = color_model
+
+
+class FakeRoi:
+    def __init__(self, name: str, position: tuple[int, int, int]) -> None:
+        self.name = name
+        self.position = position
+
+    def clone(self) -> FakeRoi:
+        return FakeRoi(self.name, self.position)
+
+    def setPosition(self, c: int, z: int, t: int) -> None:
+        self.position = (c, z, t)
+
+    def getCPosition(self) -> int:
+        return self.position[0]
+
+    def getZPosition(self) -> int:
+        return self.position[1]
+
+    def getTPosition(self) -> int:
+        return self.position[2]
+
+
+class FakeOverlay:
+    def __init__(self, rois: list[FakeRoi]) -> None:
+        self.rois = rois
+        self.crop_args: tuple[int, int, int, int, int, int] | None = None
+
+    def duplicate(self) -> FakeOverlay:
+        return FakeOverlay([roi.clone() for roi in self.rois])
+
+    def crop(self, c1: int, c2: int, z1: int, z2: int, t1: int, t2: int) -> FakeOverlay:
+        self.crop_args = (c1, c2, z1, z2, t1, t2)
+        self.rois = [
+            roi
+            for roi in self.rois
+            if (roi.getCPosition() in {0, c1})
+            and (roi.getZPosition() in {0, z1})
+            and (roi.getTPosition() in {0, t1})
+        ]
+        return self
+
+    def size(self) -> int:
+        return len(self.rois)
+
+    def get(self, index: int) -> FakeRoi:
+        return self.rois[index]
+
+    def add(self, roi: FakeRoi) -> None:
+        self.rois.append(roi)
+
+
+class FakeDetachedImage:
+    def __init__(self) -> None:
+        self.title: str | None = None
+        self.processor: FakePlaneProcessor | None = None
+        self.display_range: tuple[float, float] | None = None
+        self.overlay: FakeOverlay | None = None
+        self.roi: FakeRoi | None = None
+        self.flatten_calls = 0
+        self.buffered_image = object()
+
+    def setProcessor(self, title: str, processor: FakePlaneProcessor) -> None:
+        self.title = title
+        self.processor = processor
+
+    def setDisplayRange(self, minimum: float, maximum: float) -> None:
+        self.display_range = (minimum, maximum)
+
+    def setOverlay(self, overlay: FakeOverlay) -> None:
+        self.overlay = overlay
+
+    def setRoi(self, roi: FakeRoi) -> None:
+        self.roi = roi
+
+    def flatten(self) -> FakeDetachedImage:
+        self.flatten_calls += 1
+        return self
+
+    def getBufferedImage(self) -> object:
+        return self.buffered_image
+
+
+class FakeFullPlaneImagePlus:
+    def __init__(self) -> None:
+        self.width = 160
+        self.height = 100
+        self.position = (2, 3, 4)
+        self.color_model = object()
+        self.processor = FakePlaneProcessor(self.width, self.height, self.color_model)
+        self.roi = FakeRoi("active", self.position)
+        self.overlay = FakeOverlay(
+            [
+                FakeRoi("visible", self.position),
+                FakeRoi("outside", (1, 3, 4)),
+            ]
+        )
+        self.created: FakeDetachedImage | None = None
+        self.duplicate_calls = 0
+
+    def getC(self) -> int:
+        return self.position[0]
+
+    def getZ(self) -> int:
+        return self.position[1]
+
+    def getT(self) -> int:
+        return self.position[2]
+
+    def getProcessor(self) -> FakePlaneProcessor:
+        return self.processor
+
+    def createImagePlus(self) -> FakeDetachedImage:
+        self.created = FakeDetachedImage()
+        return self.created
+
+    def getTitle(self) -> str:
+        return "full-plane"
+
+    def getDisplayRangeMin(self) -> float:
+        return 12.0
+
+    def getDisplayRangeMax(self) -> float:
+        return 234.0
+
+    def getOverlay(self) -> FakeOverlay:
+        return self.overlay
+
+    def getRoi(self) -> FakeRoi:
+        return self.roi
+
+    def duplicate(self) -> object:
+        self.duplicate_calls += 1
+        raise AssertionError("old ROI crop boundary invoked")
+
+
+class NoDuplicatorScyJava:
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+
+    def jimport(self, name: str) -> object:
+        self.requested.append(name)
+        raise AssertionError("old Duplicator.run crop boundary invoked")
+
+
 def test_fit_within_never_enlarges() -> None:
     assert fit_within(Image.new("RGB", (10, 20)), 2048).size == (10, 20)
     assert fit_within(Image.new("RGB", (4096, 2048)), 2048).size == (2048, 1024)
@@ -207,6 +371,92 @@ def test_render_active_image_flattens_only_a_current_plane_view(monkeypatch) -> 
     assert result.metadata["current_t"] == 4
     assert result.metadata["overlay_present"] is True
     assert result.metadata["roi_present"] is True
+
+
+def test_render_active_image_keeps_the_full_current_plane_and_clones_annotations(
+    monkeypatch,
+) -> None:
+    source = FakeFullPlaneImagePlus()
+    no_duplicator = NoDuplicatorScyJava()
+    source_processor = source.processor
+    source_position = source.position
+    source_roi_position = source.roi.position
+    source_overlay_positions = [roi.position for roi in source.overlay.rois]
+    monkeypatch.setitem(sys.modules, "scyjava", no_duplicator)
+    monkeypatch.setattr(
+        imaging,
+        "_buffered_image_to_pil",
+        lambda buffered: Image.new("RGB", (source.width, source.height)),
+    )
+
+    result = render_active_image(FakeIJ(active=source))
+
+    detached = source.created
+    assert detached is not None
+    assert result.width == source.width
+    assert result.height == source.height
+    assert no_duplicator.requested == []
+    assert source.duplicate_calls == 0
+    assert source.processor is source_processor
+    assert source.processor.duplicate_calls == 1
+    assert source.position == source_position
+    assert source.roi.position == source_roi_position
+    assert [roi.position for roi in source.overlay.rois] == source_overlay_positions
+    assert detached.title == "full-plane"
+    assert detached.processor is not source_processor
+    assert detached.processor is not None
+    assert detached.processor.width == source.width
+    assert detached.processor.height == source.height
+    assert detached.processor.color_model is source.color_model
+    assert detached.display_range == (12.0, 234.0)
+    assert detached.flatten_calls == 1
+    assert detached.roi is None
+    assert detached.overlay is not source.overlay
+    assert detached.overlay is not None
+    assert detached.overlay.crop_args == (2, 2, 3, 3, 4, 4)
+    assert [roi.name for roi in detached.overlay.rois] == ["visible", "active"]
+    assert [roi.position for roi in detached.overlay.rois] == [(1, 1, 1)] * 2
+
+
+def _header_only_png(width: int, height: int) -> bytes:
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", checksum)
+        )
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IEND", b"")
+
+
+def test_compare_paths_rejects_oversized_header_before_decode_or_arrays(
+    monkeypatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "oversized.png"
+    path.write_bytes(_header_only_png(4_097, 4_097))
+    monkeypatch.setattr(
+        imaging.Image.Image,
+        "convert",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("image decode was attempted")
+        ),
+    )
+    monkeypatch.setattr(
+        imaging.np,
+        "asarray",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("array allocation was attempted")
+        ),
+    )
+
+    with pytest.raises(FijiError) as raised:
+        compare_paths(path, path)
+
+    assert raised.value.code == "image_too_large"
+    assert raised.value.outcome is Outcome.FAILED
 
 
 def test_screenshot_active_image_returns_bounded_native_png_and_saves_exact_bytes(
