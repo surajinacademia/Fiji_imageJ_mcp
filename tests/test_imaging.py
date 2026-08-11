@@ -323,8 +323,53 @@ def test_results_render_is_deterministic_and_marks_omissions() -> None:
     second = render_results(["Area", "Mean"], [[1, 2]] * 101, total_rows=101)
 
     assert first.png == second.png
+    assert first.metadata == second.metadata
+    assert first.metadata["content_truncated"] is False
     assert first.metadata["rendered_rows"] == 100
     assert first.metadata["omitted_rows"] == 1
+
+
+def _guard_image_new_dimensions(monkeypatch) -> list[tuple[int, int]]:
+    """Reject an unsafe RGB allocation before Pillow attempts it."""
+    original_new = imaging.Image.new
+    requested_sizes: list[tuple[int, int]] = []
+
+    def guarded_new(
+        mode: str, size: tuple[int, int], *args: Any, **kwargs: Any
+    ) -> Image.Image:
+        requested_sizes.append(size)
+        if size[0] > imaging._MAX_DIMENSION or size[1] > imaging._MAX_DIMENSION:
+            raise AssertionError(f"unsafe Image.new allocation: {size}")
+        return original_new(mode, size, *args, **kwargs)
+
+    monkeypatch.setattr(imaging.Image, "new", guarded_new)
+    return requested_sizes
+
+
+def test_results_render_caps_horizontal_content_before_rgb_allocation(
+    monkeypatch,
+) -> None:
+    requested_sizes = _guard_image_new_dimensions(monkeypatch)
+
+    result = render_results(["wide" * 1_000], [], total_rows=0)
+
+    assert requested_sizes
+    assert result.width == imaging._MAX_DIMENSION
+    assert result.height <= imaging._MAX_DIMENSION
+    assert result.metadata["content_truncated"] is True
+
+
+def test_results_render_caps_newline_expanded_content_before_rgb_allocation(
+    monkeypatch,
+) -> None:
+    requested_sizes = _guard_image_new_dimensions(monkeypatch)
+
+    result = render_results(["\n".join(["tall"] * 1_000)], [], total_rows=0)
+
+    assert requested_sizes
+    assert result.width <= imaging._MAX_DIMENSION
+    assert result.height == imaging._MAX_DIMENSION
+    assert result.metadata["content_truncated"] is True
 
 
 def test_equal_images_return_zero_metrics_and_three_panels(tmp_path: Path) -> None:

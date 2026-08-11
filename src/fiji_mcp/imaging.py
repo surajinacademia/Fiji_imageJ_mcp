@@ -359,22 +359,32 @@ def _text_lines(
     return lines
 
 
-def _render_text(lines: list[str]) -> Image.Image:
+def _render_text(lines: list[str]) -> tuple[Image.Image, bool]:
     font = ImageFont.load_default()
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
     bounds = [probe.textbbox((0, 0), line, font=font) for line in lines]
     widths = [right - left for left, _top, right, _bottom in bounds]
     heights = [bottom - top for _left, top, _right, bottom in bounds]
     line_height = int(max(heights, default=1) + 3)
-    width = max(int(max(widths, default=1) + 2 * _MARGIN), 1)
-    height = max(int(len(lines) * line_height + 2 * _MARGIN), 1)
-    image = Image.new("RGB", (width, height), "white")
+    natural_width = max(int(max(widths, default=1) + 2 * _MARGIN), 1)
+    natural_height = max(int(len(lines) * line_height + 2 * _MARGIN), 1)
+    content_truncated = (
+        natural_width > _MAX_DIMENSION or natural_height > _MAX_DIMENSION
+    )
+    image = Image.new(
+        "RGB",
+        (
+            min(natural_width, _MAX_DIMENSION),
+            min(natural_height, _MAX_DIMENSION),
+        ),
+        "white",
+    )
     draw = ImageDraw.Draw(image)
     y: int = _MARGIN
     for line in lines:
         draw.text((_MARGIN, y), line, fill="black", font=font)
         y += line_height
-    return image
+    return image, content_truncated
 
 
 def render_results(
@@ -384,7 +394,9 @@ def render_results(
     rendered_rows = list(rows[:_MAX_RESULT_ROWS])
     total = max(int(total_rows), 0)
     omitted_rows = max(total - len(rendered_rows), 0)
-    image = _render_text(_text_lines(columns, rendered_rows, omitted_rows))
+    image, content_truncated = _render_text(
+        _text_lines(columns, rendered_rows, omitted_rows)
+    )
     return _rendered_png(
         image,
         {
@@ -393,6 +405,7 @@ def render_results(
             "total_rows": total,
             "rendered_rows": len(rendered_rows),
             "omitted_rows": omitted_rows,
+            "content_truncated": content_truncated,
         },
     )
 

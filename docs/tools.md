@@ -70,10 +70,12 @@ Saves the current image to the exact requested local filename. Parent
 directories are created. Only these exact lowercase suffixes are supported:
 `.tif`, `.tiff`, `.jpg`, `.png`, `.gif`, `.bmp`, `.fits`, `.pgm`, `.zip`,
 `.raw`, and `.avi`. `.jpeg` and case variants are rejected because ImageJ
-rewrites those filename spellings. An existing exact output path is also
-rejected: `save_image` never overwrites a file. Returns the exact resolved
-`path`, the extension without its leading dot as `format`, and `image` metadata
-summary.
+rewrites those filename spellings. Within one MCP server process, an exact
+output that exists when the serialized save begins is rejected. This is not a
+cross-process atomic publication guarantee; use a dedicated output directory
+when another local process may create the same filename. Returns the exact
+resolved `path`, the extension without its leading dot as `format`, and `image`
+metadata summary.
 
 ## `get_results(offset: int = 0, limit: int = 500)`
 
@@ -105,11 +107,16 @@ includes `save_path`.
   `height`.
 - `results` renders a deterministic table. Its metadata includes `target`,
   `columns`, `total_rows`, `rendered_rows`, `omitted_rows`, `width`, and
-  `height`.
+  `height`, and `content_truncated`. `content_truncated` is `true` when the
+  natural text canvas would exceed the Results screenshot limit in either
+  dimension.
 
-Neither target is enlarged; dimensions over 2,048 pixels are reduced
-proportionally. To compare a workflow visually, save one capture before the
-operation and another after it, then use their paths with `compare_screenshots`.
+Neither target is enlarged. Active-image dimensions over 2,048 pixels are
+reduced proportionally. Results text uses a canvas capped independently at
+2,048 pixels wide and high before RGB allocation; overflowing content is
+deterministically clipped instead of allocating its natural size. To compare a
+workflow visually, save one capture before the operation and another after it,
+then use their paths with `compare_screenshots`.
 
 ## `compare_screenshots(before_path: str, after_path: str, save_path: str | None = None)`
 
