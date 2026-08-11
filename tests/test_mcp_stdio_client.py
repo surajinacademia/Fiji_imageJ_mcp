@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -153,6 +154,17 @@ async def test_mcp_stdio_headless_current_survives_cross_request_threads(
     async with client:
         opened = await client.call_tool("open_image", {"path": str(image_path)})
         assert opened.is_error is False
+        opened_payload = _tool_payload(opened)
+
+        concurrent_states = await asyncio.gather(
+            *(client.call_tool("get_state", {}) for _ in range(3))
+        )
+        for concurrent_state in concurrent_states:
+            assert concurrent_state.is_error is False
+            assert (
+                _tool_payload(concurrent_state)["active_image"]
+                == opened_payload["image"]
+            )
 
         state = await client.call_tool("get_state", {})
         assert state.is_error is False

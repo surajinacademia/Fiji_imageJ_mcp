@@ -11,6 +11,7 @@ import platform
 import sys
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from itertools import islice
@@ -735,6 +736,9 @@ def to_jsonable(value: Any) -> Any:
 
 
 _OPERATION_LOCK = threading.RLock()
+_FIJI_WORKER_LOCK = threading.Lock()
+_FIJI_WORKER: ThreadPoolExecutor | None = None
+_FIJI_WORKER_THREAD_ID: int | None = None
 _LIFECYCLE = Lifecycle.NEW
 _IJ: Any | None = None
 _SETTINGS: Settings | None = None
@@ -897,8 +901,37 @@ def _start_fiji(settings: Settings) -> Any:
     return imagej.init(str(settings.fiji_path), mode=mode)
 
 
+def _is_fiji_worker_thread() -> bool:
+    return threading.get_ident() == _FIJI_WORKER_THREAD_ID
+
+
+def _run_on_fiji_worker(function: Callable[[], T]) -> T:
+    """Run Fiji/JVM work on the process-lifetime, single-threaded executor."""
+    global _FIJI_WORKER
+    if _is_fiji_worker_thread():
+        return function()
+    with _FIJI_WORKER_LOCK:
+        if _FIJI_WORKER is None:
+            _FIJI_WORKER = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="fiji-mcp",
+            )
+        worker = _FIJI_WORKER
+
+    def run() -> T:
+        global _FIJI_WORKER_THREAD_ID
+        _FIJI_WORKER_THREAD_ID = threading.get_ident()
+        return function()
+
+    return worker.submit(run).result()
+
+
 def get_ij() -> Any:
-    """Return the single JVM gateway, starting it lazily when necessary."""
+    """Return the JVM gateway, starting it on Fiji's persistent worker thread."""
+    return _run_on_fiji_worker(_get_ij)
+
+
+def _get_ij() -> Any:
     global _IJ, _LIFECYCLE, _SETTINGS
     with _OPERATION_LOCK:
         if _LIFECYCLE is Lifecycle.READY:
@@ -1028,8 +1061,12 @@ def _run_read_phase(operation: str, ij: Any, function: Callable[[Any], T]) -> T:
 
 def run_read(operation: str, function: Callable[[Any], T]) -> T:
     """Run a read-only Fiji operation with one safe retry at most."""
+    return _run_on_fiji_worker(lambda: _run_read(operation, function))
+
+
+def _run_read(operation: str, function: Callable[[Any], T]) -> T:
     with _OPERATION_LOCK:
-        return _run_read_phase(operation, get_ij(), function)
+        return _run_read_phase(operation, _get_ij(), function)
 
 
 def run_mutation(
@@ -1038,8 +1075,16 @@ def run_mutation(
     dispatch: Callable[[Any, P], T],
 ) -> T:
     """Run a mutation with a retryable pre-dispatch phase and one dispatch."""
+    return _run_on_fiji_worker(lambda: _run_mutation(operation, prepare, dispatch))
+
+
+def _run_mutation(
+    operation: str,
+    prepare: Callable[[Any], P],
+    dispatch: Callable[[Any, P], T],
+) -> T:
     with _OPERATION_LOCK:
-        ij = get_ij()
+        ij = _get_ij()
         try:
             prepared = _run_read_phase(f"{operation}.prepare", ij, prepare)
         except FijiError:
@@ -1056,9 +1101,14 @@ def run_mutation(
 
 def get_settings() -> Settings:
     """Return settings associated with the initialized Fiji gateway."""
-    get_ij()
-    assert _SETTINGS is not None
-    return _SETTINGS
+    return _run_on_fiji_worker(_get_settings)
+
+
+def _get_settings() -> Settings:
+    with _OPERATION_LOCK:
+        _get_ij()
+        assert _SETTINGS is not None
+        return _SETTINGS
 
 
 def runtime_snapshot() -> dict[str, Any]:
@@ -1071,7 +1121,7 @@ def runtime_snapshot() -> dict[str, Any]:
 
 
 def _reset_runtime_for_tests(*, ready_ij: Any | None = None) -> None:
-    """Reset process state for isolated unit tests only."""
+    """Reset lifecycle state for isolated tests without replacing the Fiji worker."""
     global _IJ, _LIFECYCLE, _SETTINGS
     _IJ = ready_ij
     _LIFECYCLE = Lifecycle.READY if ready_ij is not None else Lifecycle.NEW
