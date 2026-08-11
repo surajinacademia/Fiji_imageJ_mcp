@@ -6,6 +6,9 @@ import math
 from pathlib import Path
 from typing import Any, Literal
 
+from fastmcp.tools.tool import ToolResult
+from fastmcp.utilities.types import Image as MCPImage
+
 from fiji_mcp.bridge import (
     FijiError,
     Outcome,
@@ -15,6 +18,12 @@ from fiji_mcp.bridge import (
     run_read,
     runtime_snapshot,
     to_jsonable,
+)
+from fiji_mcp.imaging import (
+    RenderedPNG,
+    compare_paths,
+    render_active_image,
+    render_results,
 )
 
 _SAVE_SUFFIXES = {
@@ -874,3 +883,93 @@ def run_script(language: Literal["ijm", "groovy"], code: str) -> dict[str, Any]:
         }
 
     return run_mutation("run_script", prepare, dispatch)
+
+
+def _validate_screenshot_target(target: str) -> Literal["active_image", "results"]:
+    if not isinstance(target, str) or target not in {"active_image", "results"}:
+        raise _failed(
+            "invalid_target",
+            "target must be active_image or results.",
+            "Use target='active_image' or target='results' and retry.",
+        )
+    return target
+
+
+def _resolve_render_output_path(save_path: str | None) -> Path | None:
+    if save_path is None:
+        return None
+    output_path = _resolve_path(save_path)
+    try:
+        if output_path.is_dir():
+            raise _failed(
+                "invalid_path",
+                f"Output path is a directory: {output_path}",
+                "Choose an output filename instead and retry.",
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    except FijiError:
+        raise
+    except OSError as error:
+        raise _failed(
+            "invalid_path",
+            f"Could not create output directory: {output_path.parent}",
+            "Choose a writable output path and retry.",
+        ) from error
+    return output_path
+
+
+def _save_rendered_png(
+    rendered: RenderedPNG, output_path: Path | None
+) -> dict[str, Any]:
+    metadata = dict(rendered.metadata)
+    if output_path is None:
+        return metadata
+    try:
+        output_path.write_bytes(rendered.png)
+        if output_path.read_bytes() != rendered.png:
+            raise OSError("saved PNG bytes differ from rendered bytes")
+    except OSError as error:
+        raise _failed(
+            "save_failed",
+            f"Could not save rendered PNG: {output_path}",
+            "Choose a writable output path and retry.",
+        ) from error
+    metadata["save_path"] = str(output_path)
+    return metadata
+
+
+def _rendered_tool_result(
+    rendered: RenderedPNG, output_path: Path | None
+) -> ToolResult:
+    """Return exactly one native MCP PNG content block and structured metadata."""
+    metadata = _save_rendered_png(rendered, output_path)
+    return ToolResult(
+        content=[MCPImage(data=rendered.png, format="png").to_image_content()],
+        structured_content=metadata,
+    )
+
+
+def screenshot(
+    target: Literal["active_image", "results"], save_path: str | None = None
+) -> ToolResult:
+    """Render the active current plane or the first 100 live Results rows as PNG."""
+    selected_target = _validate_screenshot_target(target)
+    output_path = _resolve_render_output_path(save_path)
+
+    def capture(ij: Any) -> RenderedPNG:
+        if selected_target == "active_image":
+            return render_active_image(ij)
+        results = _read_results(ij, offset=0, limit=100)
+        return render_results(
+            results["columns"], results["rows"], results["total_rows"]
+        )
+
+    return _rendered_tool_result(run_read("screenshot", capture), output_path)
+
+
+def compare_screenshots(
+    before_path: str, after_path: str, save_path: str | None = None
+) -> ToolResult:
+    """Compare two local rendered images without acquiring or initializing Fiji."""
+    output_path = _resolve_render_output_path(save_path)
+    return _rendered_tool_result(compare_paths(before_path, after_path), output_path)
