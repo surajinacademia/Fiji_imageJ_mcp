@@ -589,18 +589,37 @@ def _command_candidates_text(commands: list[dict[str, Any]]) -> str:
     return ", ".join(f"{name} ({class_name})" for name, class_name, _ in candidates)
 
 
-def _ambiguous_command(name: str, candidates: list[dict[str, Any]]) -> FijiError:
+def _ambiguous_command(
+    name: str,
+    candidates: list[dict[str, Any]],
+    commands: list[dict[str, Any]],
+) -> FijiError:
     delegate_classes = {
         _command_text(command.get("class_name")) for command in candidates
     }
     display_names = [_command_text(command.get("name")) for command in candidates]
-    recovery = "Use an exact delegate class from search_commands and retry."
-    if len(delegate_classes) == 1:
+    catalog_names = [_command_text(command.get("name")) for command in commands]
+    catalog_classes = [_command_text(command.get("class_name")) for command in commands]
+    recovery = "Use run_script with IJM or Groovy for this command."
+    if (
+        len(delegate_classes) == 1
+        and all(display_names)
+        and all(
+            catalog_names.count(display_name) == 1 for display_name in display_names
+        )
+    ):
         recovery = (
             "Use an exact case-sensitive display name from search_commands and retry."
-            if all(display_names) and len(set(display_names)) == len(display_names)
-            else "Use run_script with IJM or Groovy for this command."
         )
+    elif (
+        len(delegate_classes) > 1
+        and all(delegate_classes)
+        and all(
+            catalog_classes.count(delegate_class) == 1
+            for delegate_class in delegate_classes
+        )
+    ):
+        recovery = "Use an exact delegate class from search_commands and retry."
     return _failed(
         "ambiguous_command",
         f"Command '{name}' is ambiguous. Candidate commands: "
@@ -620,7 +639,7 @@ def _resolve_command(commands: list[dict[str, Any]], name: str) -> dict[str, Any
     if len(class_matches) == 1:
         return class_matches[0]
     if len(class_matches) > 1:
-        raise _ambiguous_command(target, class_matches)
+        raise _ambiguous_command(target, class_matches, commands)
 
     exact_name_matches = [
         command for command in commands if _command_text(command.get("name")) == target
@@ -628,7 +647,7 @@ def _resolve_command(commands: list[dict[str, Any]], name: str) -> dict[str, Any
     if len(exact_name_matches) == 1:
         return exact_name_matches[0]
     if len(exact_name_matches) > 1:
-        raise _ambiguous_command(target, exact_name_matches)
+        raise _ambiguous_command(target, exact_name_matches, commands)
 
     folded_target = target.casefold()
     folded_name_matches = [
@@ -639,7 +658,7 @@ def _resolve_command(commands: list[dict[str, Any]], name: str) -> dict[str, Any
     if len(folded_name_matches) == 1:
         return folded_name_matches[0]
     if len(folded_name_matches) > 1:
-        raise _ambiguous_command(target, folded_name_matches)
+        raise _ambiguous_command(target, folded_name_matches, commands)
 
     raise _failed(
         "command_not_found",

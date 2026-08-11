@@ -635,6 +635,23 @@ def test_ambiguous_same_class_identical_names_require_script_fallback():
     assert "delegate class" not in raised.value.recovery
 
 
+def test_ambiguous_same_class_recovery_requires_globally_unique_display_names():
+    commands = [
+        {"name": "Foo", "class_name": "pkg.Shared", "family": "scijava"},
+        {"name": "Bar", "class_name": "pkg.Shared", "family": "scijava"},
+        {"name": "Foo", "class_name": "pkg.Other", "family": "scijava"},
+    ]
+
+    with pytest.raises(FijiError) as raised:
+        minimal._resolve_command(commands, "pkg.Shared")
+
+    assert (
+        raised.value.recovery == "Use run_script with IJM or Groovy for this command."
+    )
+    assert "display name" not in raised.value.recovery
+    assert "delegate class" not in raised.value.recovery
+
+
 def test_missing_command_is_deterministic():
     with pytest.raises(FijiError) as raised:
         minimal._resolve_command(COMMANDS, "does not exist")
