@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Repository layout:** per-version `RELEASE_NOTES_v*.md` files moved to [`docs/releases/`](docs/releases/); [`MANIFEST.in`](MANIFEST.in) re-includes them after the `docs/` prune so sdists stay unchanged. Added [`docs/repository_layout.md`](docs/repository_layout.md) and Docsify sidebar links.
-- **`.cursor/` is no longer in version control:** editor-local config stays on disk only ([`.gitignore`](.gitignore)). The Fiji Cursor plugin bundle lives at [`extras/cursor-fiji-mcp-plugin/`](extras/cursor-fiji-mcp-plugin/) (skills **`fiji-mcp-workflow`** and **`fiji-mcp-image-analysis`**, rules, command; **graft**ed into sdists). CI and the PyPI publish workflow fail if `.cursor/` is accidentally tracked again.
-- **Packaging CI:** [`scripts/verify_sdist_contents.sh`](scripts/verify_sdist_contents.sh) runs after **`python -m build`** in CI and publish workflows to assert the sdist still contains the Cursor plugin bundle and at least one **`docs/releases/RELEASE_NOTES_vX.Y.Z.md`** file (guards **`MANIFEST.in`** regressions).
-- **Supply chain:** PyPI publish pins **`pypa/gh-action-pypi-publish`** to commit **`cef221092ed1bacb1cc03d23a2d87d1d172e277b`** (release **v1.14.0**, 2026-04-07) instead of the mutable **`release/v1`** ref.
+- **Breaking simplification:** replace the legacy framework with the exact
+  nine-tool Fiji MCP surface: state, command discovery and execution,
+  IJM/Groovy scripts, image I/O, Results pagination, screenshots, and
+  path-based screenshot comparison.
 
 ## [0.1.3] - 2026-04-11
 

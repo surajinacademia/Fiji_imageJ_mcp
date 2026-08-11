@@ -6,7 +6,7 @@ import io
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -365,12 +365,12 @@ def _render_text(lines: list[str]) -> Image.Image:
     bounds = [probe.textbbox((0, 0), line, font=font) for line in lines]
     widths = [right - left for left, _top, right, _bottom in bounds]
     heights = [bottom - top for _left, top, _right, bottom in bounds]
-    line_height = max(heights, default=1) + 3
-    width = max(max(widths, default=1) + 2 * _MARGIN, 1)
-    height = max(len(lines) * line_height + 2 * _MARGIN, 1)
+    line_height = int(max(heights, default=1) + 3)
+    width = max(int(max(widths, default=1) + 2 * _MARGIN), 1)
+    height = max(int(len(lines) * line_height + 2 * _MARGIN), 1)
     image = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(image)
-    y = _MARGIN
+    y: int = _MARGIN
     for line in lines:
         draw.text((_MARGIN, y), line, fill="black", font=font)
         y += line_height
@@ -460,7 +460,7 @@ def _open_image_header(path: Path) -> Image.Image:
         with Image.open(path) as image:
             _validate_image_header(path, image)
             image.load()
-            return image.convert("RGB")
+            return cast("Image.Image", image.convert("RGB"))
     except FijiError:
         raise
     except Exception as error:
@@ -510,7 +510,7 @@ def _labelled_panel(label: str, image: Image.Image) -> Image.Image:
     font = ImageFont.load_default()
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
     left, top, right, bottom = probe.textbbox((0, 0), label, font=font)
-    label_height = bottom - top
+    label_height = int(bottom - top)
     panel = Image.new(
         "RGB",
         (image.width + 2 * _MARGIN, label_height + image.height + 3 * _MARGIN),

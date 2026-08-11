@@ -19,27 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure .cursor is not tracked (local editor-only)
-        run: |
-          tracked="$(git ls-files | grep -E '^\.cursor(/|$)' || true)"
-          if [ -n "$tracked" ]; then
-            echo "::error::The .cursor path must not be committed."
-            echo "$tracked"
-            exit 1
-          fi
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install build
-        run: python -m pip install --upgrade pip build
+      - name: Install distribution validators
+        run: python -m pip install --upgrade pip build twine
 
-      - name: Build sdist and wheel
+      - name: Build and validate distribution
         run: |
           python -m build
-          bash scripts/verify_sdist_contents.sh
+          python -m twine check dist/*
+          python tests/wheel_smoke.py dist/fiji_mcp_server-0.2.0-py3-none-any.whl
 
       - name: Publish to PyPI
         # Pinned to v1.14.0 (2026-04-07); bump SHA when upgrading: https://github.com/pypa/gh-action-pypi-publish/releases

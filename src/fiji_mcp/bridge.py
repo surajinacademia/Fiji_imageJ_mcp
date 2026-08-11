@@ -173,21 +173,21 @@ def _unbox_java_primitive(value: Any, java_type: str | None) -> Any:
         "java.lang.Integer": "intValue",
         "java.lang.Long": "longValue",
     }
-    integer_method = integer_methods.get(java_type)
+    integer_method = integer_methods.get(java_type) if java_type is not None else None
     if integer_method is not None:
         raw_value = _call_named(value, integer_method)
-        result = _safe_int(raw_value) if raw_value is not _MISSING else None
-        return result if result is not None else _MISSING
+        integer_result = _safe_int(raw_value) if raw_value is not _MISSING else None
+        return integer_result if integer_result is not None else _MISSING
 
     float_methods = {
         "java.lang.Float": "floatValue",
         "java.lang.Double": "doubleValue",
     }
-    float_method = float_methods.get(java_type)
+    float_method = float_methods.get(java_type) if java_type is not None else None
     if float_method is not None:
         raw_value = _call_named(value, float_method)
-        result = _safe_float(raw_value) if raw_value is not _MISSING else None
-        return result if result is not None else _MISSING
+        float_result = _safe_float(raw_value) if raw_value is not _MISSING else None
+        return float_result if float_result is not None else _MISSING
 
     if java_type in {"java.lang.Character", "java.lang.String"}:
         method_name = "charValue" if java_type == "java.lang.Character" else "toString"
@@ -286,14 +286,14 @@ def _dataset_dimension_summary(image: Any, dimensions: int) -> dict[str, int] | 
         axis = _call_named(image, "axis", index)
         if axis is _MISSING:
             return None
-        field = axis_fields.get(_axis_label(axis) or "")
-        if field is None:
+        axis_field = axis_fields.get(_axis_label(axis) or "")
+        if axis_field is None:
             continue
         size = _integer_from_method(image, "dimension", index)
         if size is None:
             return None
-        values[field] = size
-        recognized.add(field)
+        values[axis_field] = size
+        recognized.add(axis_field)
     return values if {"width", "height"}.issubset(recognized) else None
 
 

@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 only
+    import tomli as tomllib
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,3 +38,17 @@ def test_mcp_is_fastmcp_after_attribute_access() -> None:
 
     mcp = fiji_mcp.mcp
     assert mcp.__class__.__name__ == "FastMCP"
+
+
+def test_runtime_dependencies_are_minimal():
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+    assert project["project"]["version"] == "0.2.0"
+    assert project["project"]["dependencies"] == [
+        "fastmcp>=2.10.3",
+        "pyimagej>=1.5.0",
+        "numpy>=1.26.0",
+        "Pillow>=10.0.0",
+    ]
+    assert project["project"]["scripts"] == {
+        "fiji-mcp-server": "fiji_mcp.__main__:main"
+    }

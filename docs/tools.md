@@ -1,125 +1,133 @@
-# Available tools
+# Fiji MCP nine-tool reference
 
-The server exposes **19 tools** you can ask your AI assistant to use. You never call them directly — just describe what you want and the assistant picks the right ones.
+The server starts Fiji lazily on the first Fiji-backed call. `FIJI_PATH` is
+required and must identify a Fiji root containing `jars/` and `plugins/`.
+`FIJI_MODE` is optional: it defaults to `headless` and may be `gui` when a
+desktop-only operation is necessary. Before startup, the bridge prefers one
+valid current-platform JVM bundled under `FIJI_PATH/java/`, preserves an
+existing SciJava JVM selection, and otherwise falls back to SciJava's normal
+JVM selection.
 
----
+All Fiji operations share one process-wide lock. The server exposes exactly the
+following nine tools.
 
-## Running macros and images
+## `get_state()`
 
-| Tool | What it does |
-|------|-------------|
-| `health_check` | Check that Fiji is running and get the version |
-| `run_macro` | Run any ImageJ macro — this is how plugins get called |
-| `run_batch_macros` | Run several macros in sequence |
-| `open_image` | Open an image file in Fiji |
-| `save_image` | Save the current image to disk |
+Returns a live state dictionary with:
 
-**Example prompts:**
-```
-"Open ./cells.tif"
-"Apply a Gaussian blur with sigma 3"
-"Save the result as ./output/blurred.tif"
-```
+- `lifecycle`, `version`, and `mode`.
+- `active_image`, or `null`, and `open_images`; each image summary has `title`,
+  `width`, `height`, `channels`, `slices`, `frames`, and `bit_depth`.
+- `results` containing its `columns` and `total_rows`.
 
----
+Use this to confirm setup and inspect Fiji before deciding whether an uncertain
+mutation should be repeated.
 
-## Screenshots
+## `search_commands(query: str, limit: int = 20)`
 
-| Tool | What it does |
-|------|-------------|
-| `screenshot_fiji` | Capture a screenshot for visual verification |
+Searches registered SciJava commands and ImageJ1 menu commands. `query` may be
+empty; `limit` must be from 1 through 100. The response contains `query`,
+`returned`, `total`, and ordered `commands`. Each command record includes
+`name`, `class_name`, `menu_path`, `family`, `invocation_route`, and `inputs`.
+SciJava input records provide `name`, `type`, `required`, and `description`.
 
-**Three capture modes:**
-- `active_image` — rasterize the current image (works headless, best for verifying results)
-- `results_table` — render the ImageJ Results table as an image (works headless)
-- `full_screen` — capture the whole screen (requires GUI mode)
+`invocation_route` is `structured_parameters`, `legacy_options`, or
+`script_fallback`. Search first when the plugin name or its accepted route is
+unclear.
 
-**Example prompts:**
-```
-"Show me a screenshot of the current image"
-"Capture the Results table after measuring"
-```
+## `run_command(name: str, parameters: dict[str, Any] | None = None, options: str | None = None)`
 
----
+Runs one registered command. `name` resolves in this order: exact class name,
+exact case-sensitive display name, then a unique case-insensitive display name.
+`parameters` is for compatible SciJava commands; `options` is for an ImageJ1
+options string. They are mutually exclusive. Commands whose inputs require a
+script fallback return an actionable error instead of guessing.
 
-## Discovering plugins
+Returns `name`, `class_name`, `family`, `invocation_route`, JSON-safe `outputs`,
+the final 4,000-character `log_tail`, and `active_image` metadata after
+execution.
 
-Don't know which ImageJ plugin to use? The assistant can search for you.
+## `run_script(language: Literal["ijm", "groovy"], code: str)`
 
-| Tool | What it does |
-|------|-------------|
-| `search_commands` | Find commands by keyword |
-| `list_all_commands` | List all installed commands |
-| `describe_plugin` | Get details about a specific command |
-| `list_extensions` | Show installed update sites and extensions |
+Runs one non-empty ImageJ Macro (`ijm`) or Groovy (`groovy`) script. It is the
+escape hatch for ROI work, unusual plugin APIs, complex Java inputs, and
+already-installed plugins that are scriptable but not representable as a
+registered structured command.
 
-**Example prompts:**
-```
-"Search for ImageJ commands related to 'segment'"
-"What plugins are available for colocalization?"
-"What parameters does the Analyze Particles command accept?"
-```
+Returns `language`, a bounded JSON-safe `result`, the final
+4,000-character `log_tail`, and `active_image` metadata. IJM and Groovy are
+trusted arbitrary local code: they are not a plugin installer or a sandbox.
 
----
+## `open_image(path: str)`
 
-## Image information
+Opens an existing local image and makes it current. Returns the resolved `path`
+and an `image` metadata summary. Basic formats use Fiji directly; use a
+registered command or script for formats that need an installed importer.
 
-| Tool | What it does |
-|------|-------------|
-| `list_open_images` | Show all currently open image windows |
-| `get_image_info` | Get dimensions, channels, bit depth, and pixel statistics |
+## `save_image(path: str)`
 
-**Example prompts:**
-```
-"What images are currently open in Fiji?"
-"What are the dimensions and bit depth of the current image?"
-```
+Saves the current image to a local filename. The filename extension selects the
+format; parent directories are created. Supported suffixes are TIFF, PNG, JPEG,
+GIF, BMP, FITS, PGM, ZIP, RAW, and AVI variants accepted by Fiji. Returns the
+resolved `path`, canonical `format`, and `image` metadata summary.
 
----
+## `get_results(offset: int = 0, limit: int = 500)`
 
-## Multi-step workflows
+Reads an ordered page from Fiji's live Results table. `offset` must be
+non-negative; `limit` must be from 1 through 5,000. The response has original
+`columns`, ordered-array `rows`, `offset`, `returned`, and `total_rows`.
 
-| Tool | What it does |
-|------|-------------|
-| `run_workflow` | Chain multiple macro steps, with optional screenshot after each |
+Rows deliberately remain arrays so duplicate or blank ImageJ column headings
+are preserved. Finite numeric cells are JSON numbers, text cells are strings,
+missing values are `null`, and non-finite numeric values become `"NaN"`,
+`"Infinity"`, or `"-Infinity"`. Page through this tool for complete data;
+rendered Results screenshots show only the first 100 rows.
 
-The assistant can use this to build pipelines like:
-1. Subtract background
-2. Apply threshold
-3. Screenshot to verify
-4. Count particles
-5. Return results
+## `screenshot(target: Literal["active_image", "results"], save_path: str | None = None)`
 
-**Example prompts:**
-```
-"Open the image, subtract background, threshold, count cells — show me a screenshot after each step."
-"Run a full segmentation workflow and show me the results."
-```
+Renders one target as a native MCP PNG image block plus structured metadata.
+`target` is required and must be `active_image` or `results`. If `save_path` is
+provided, the identical returned PNG bytes are written there and the metadata
+includes `save_path`.
 
----
+- `active_image` renders the current C/Z/T plane with its display range, LUT,
+  visible overlay, and ROI. Its metadata includes `target`, `current_c`,
+  `current_z`, `current_t`, `overlay_present`, `roi_present`, `width`, and
+  `height`.
+- `results` renders a deterministic table. Its metadata includes `target`,
+  `columns`, `total_rows`, `rendered_rows`, `omitted_rows`, `width`, and
+  `height`.
 
-## Results and templates
+Neither target is enlarged; dimensions over 2,048 pixels are reduced
+proportionally. To compare a workflow visually, save one capture before the
+operation and another after it, then use their paths with `compare_screenshots`.
 
-| Tool | What it does |
-|------|-------------|
-| `parse_macro_output` | Parse measurement results into structured data (JSON, table, numbers) |
-| `compare_screenshots` | Compare before/after screenshots with numeric diff metrics |
-| `list_macro_templates` | Browse built-in workflow templates |
-| `get_macro_template` | Get the macro code for a specific template |
+## `compare_screenshots(before_path: str, after_path: str, save_path: str | None = None)`
 
-**Built-in template categories:** `filters`, `process`, `segment`, `analyze`, `image`, `annotate`, `channels`, `stack`, `plugins`
+Loads two local raster paths without starting Fiji and returns a native MCP PNG
+with Before and After panels; equal-sized inputs also receive an absolute-
+difference panel. Structured metadata always contains `before_dimensions`,
+`after_dimensions`, `dimensions_match`, `panels`, `width`, and `height`.
+Equal-sized inputs additionally contain `mae`, `rmse`, and
+`changed_pixel_fraction`. An optional `save_path` receives the exact comparison
+PNG bytes.
 
-**Example prompts:**
-```
-"List the available macro templates for segmentation"
-"Parse the results table and give me the mean area as a number"
-```
+The comparison does not resize or crop source images for metrics. When source
+dimensions differ, it returns the side-by-side visual and dimensions but omits
+pixel metrics.
 
----
+## Retry, output, and GUI behavior
 
-## Session
+Read-only work may receive one automatic retry only for an explicitly
+allowlisted transient failure: `InterruptedError`, `OSError` with `EINTR`, or a
+live-JVM Java `ConcurrentModificationException`. JVM initialization and all
+mutations are never retried automatically. A command, script, image open, or
+image save that fails after dispatch can have an unknown outcome; inspect
+`get_state` or `screenshot` before choosing whether to repeat it.
 
-| Tool | What it does |
-|------|-------------|
-| `get_session_trace` | Show a log of recent tool calls and open images |
-| `clear_session_trace` | Reset the session log |
+Python diagnostics and ordinary Java output go to stderr so stdio stdout stays
+valid MCP JSON-RPC. Trusted script code that deliberately writes to native file
+descriptor 1 can bypass Java stream redirection. GUI-only plugins, dialogs, and
+mouse or keyboard automation are outside the headless contract; use an
+installed scriptable route or explicitly run with `FIJI_MODE=gui` when the
+plugin supports it.

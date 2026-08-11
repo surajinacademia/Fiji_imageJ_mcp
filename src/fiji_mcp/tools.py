@@ -920,7 +920,7 @@ def _validate_screenshot_target(target: str) -> Literal["active_image", "results
             "target must be active_image or results.",
             "Use target='active_image' or target='results' and retry.",
         )
-    return target
+    return "active_image" if target == "active_image" else "results"
 
 
 def _resolve_render_output_path(save_path: str | None) -> Path | None:

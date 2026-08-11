@@ -1,135 +1,99 @@
 # Fiji MCP Server
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/pypi/v/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
-[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![CI](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml)
+Fiji MCP Server is a minimal stdio MCP server that lets an AI client control a
+local Fiji/ImageJ instance through commands, IJM, Groovy, images, Results, and
+screenshots.
 
-**Ask your AI Agent in plain English to use Fiji / ImageJ to quickly analyze microscopy image also set pipelines from Cursor, Claude, Gemini, etc. You simply paste the image or ask it to navigate to the correct file.**
-
-The goal is that the AI agent should use the right ImageJ plugin, see what you are seeing and then verify its own results by writing codes without relying on vibes. I plan to setup SKILL and AI plugins in future. Would be happy to collaborate. 
-
-<!-- Demo images: absolute raw.githubusercontent.com URLs + Markdown tables (PyPI does not host ./demo_output; raw HTML <img> is less reliable in Warehouse). -->
-
----
-
-## See it in action
-
-**"Open the image, apply a Gaussian blur, show me before and after."**
-
-| Before | After |
-| :---: | :---: |
-| ![Gaussian blur — input](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_input.jpg) | ![Gaussian blur — output](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex01_img07_processed.jpg) |
-
-**"Threshold the bright spots, outline each object, report area and circularity."**
-
-| Input | Outlined objects |
-| :---: | :---: |
-| ![Particles — input](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_input.jpg) | ![Particles — outlines](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex02_img10_overlay.jpg) |
-
-| # | Area | Circularity |
-| ---: | ---: | ---: |
-| 1 | 1052 | 0.89 |
-| 2 | 2840 | 0.72 |
-| 3 | 641 | 0.91 |
-| 4 | 1902 | 0.68 |
-
-**"Skeletonize the mask and summarize branches per tree."**
-
-| Mask | Skeleton |
-| :---: | :---: |
-| ![Skeleton — input mask](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_input.jpg) | ![Skeleton — midlines](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/demo_output/readme_ex03_img12_skeleton.jpg) |
-
-| Tree | Branches | Junctions |
-| ---: | ---: | ---: |
-| 1 | 14 | 6 |
-| 2 | 9 | 7 |
-
----
-
-## Get started in 3 steps
-
-### 1 — Install
+## Install
 
 ```bash
 pip install fiji-mcp-server
 ```
 
-> You need **Python 3.10+**, **[Fiji](https://fiji.sc/)** installed on your machine, and **Java** (required by PyImageJ). See [quickstart](docs/quickstart.md) if anything needs clarification.
+Install [Fiji](https://fiji.sc/) locally and set `FIJI_PATH` to its root
+directory, which must contain `jars/` and `plugins/`. The server defaults to
+headless Fiji; `FIJI_MODE=gui` is an explicit optional override.
 
-### 2 — Connect to your AI app
+Before Fiji starts, the bridge prefers exactly one valid JVM bundled for the
+current platform under `FIJI_PATH/java/`. An already configured SciJava JVM is
+left alone, and installations without one matching bundled JVM fall back to
+SciJava's normal JVM selection. Multiple matching bundled JVMs produce a setup
+error rather than an arbitrary choice.
 
-Replace `/Applications/Fiji` with your actual Fiji folder (the one containing `jars/` and `plugins/`).
+## Configure an MCP client
 
-| App | One command |
-|-----|-------------|
-| **Claude Desktop** | `fiji-mcp-install install claude-desktop --fiji-path /Applications/Fiji` |
-| **Cursor** | `fiji-mcp-install install cursor --fiji-path /Applications/Fiji` |
-| **Claude Code** | `fiji-mcp-install install claude-code --fiji-path /Applications/Fiji` |
-| **Gemini CLI** | `fiji-mcp-install install gemini --fiji-path /Applications/Fiji` |
-| **Windsurf** | `fiji-mcp-install install windsurf --fiji-path /Applications/Fiji` |
+Add a generic stdio server entry to your MCP client's configuration, replacing
+the Fiji path with your local installation. `FIJI_MODE` is optional and shown
+here with its default value.
 
-Then **restart** the app.
-
-### 3 — Verify it works
-
-In chat, type:
-
-```
-Run the Fiji MCP health_check tool
-```
-
-You should get back the Fiji version and mode. First startup takes 30–90 seconds while the JVM loads — that's normal.
-
----
-
-## What to ask
-
-Once connected, just describe what you want:
-
-```
-"Open ./images/cells.tif and tell me the dimensions."
-
-"Apply a Gaussian blur with sigma 4 and show me the result."
-
-"Count the bright objects and give me their areas."
-
-"Search for ImageJ commands related to 'threshold'."
-
-"Open the image, subtract background, threshold, count particles — show me a screenshot after each step."
+```json
+{
+  "mcpServers": {
+    "fiji": {
+      "command": "fiji-mcp-server",
+      "env": {
+        "FIJI_PATH": "/Applications/Fiji",
+        "FIJI_MODE": "headless"
+      }
+    }
+  }
+}
 ```
 
-No macro knowledge needed. The assistant finds the right Fiji plugin, runs it, and can show you a screenshot to verify.
+## Nine MCP tools
 
----
+| Tool | Purpose |
+| --- | --- |
+| `get_state` | Read live Fiji, image, and Results-table state. |
+| `search_commands` | Find registered SciJava and ImageJ1 commands. |
+| `run_command` | Invoke one registered command with supported parameters. |
+| `run_script` | Run one IJM or Groovy script. |
+| `open_image` | Open and activate a local image. |
+| `save_image` | Save the active image to a local path. |
+| `get_results` | Read a paginated, ordered page of the Results table. |
+| `screenshot` | Render the active image or Results table as PNG. |
+| `compare_screenshots` | Compare two saved screenshot paths numerically and visually. |
 
-## Available tools (19 total)
+## Example prompts
 
-| Category | Tools |
-|----------|-------|
-| **Run & I/O** | `health_check` `run_macro` `run_batch_macros` `open_image` `save_image` |
-| **Screenshots** | `screenshot_fiji` — full screen, active image, or results table |
-| **Discover plugins** | `list_all_commands` `search_commands` `describe_plugin` `list_extensions` |
-| **Image info** | `list_open_images` `get_image_info` |
-| **Workflows** | `run_workflow` — chain steps with screenshot verification |
-| **Results** | `parse_macro_output` `compare_screenshots` `list_macro_templates` `get_macro_template` |
-| **Session** | `get_session_trace` `clear_session_trace` |
+1. “Open `/data/cells.tif`, save an active-image screenshot to
+   `/tmp/cells-before.png`, apply a Gaussian blur, save
+   `/tmp/cells-after.png`, compare the two screenshots, and save the processed
+   image as `/data/out/cells-blurred.tif`.”
+2. “Search the installed Fiji commands for particle analysis, show the accepted
+   parameters for the best match, then run it on the active image and report
+   the returned outputs.”
+3. “Open `/data/objects.tif`, measure the objects with an IJM script, and
+   return the Results table in pages of 200 rows.”
 
----
+## Trusted local execution and limitations
 
-## Documentation
+`run_script` executes trusted arbitrary local IJM or Groovy code. It can read
+or modify files available to the MCP process, so do not expose this server to
+untrusted clients. Python diagnostics and ordinary Java output are redirected
+to stderr so stdout remains MCP JSON-RPC; deliberately writing to native file
+descriptor 1 can bypass Java stream redirection and is not a sandbox boundary.
 
-| | |
-|-|-|
-| [**Quick start**](docs/quickstart.md) | Install, configure, verify — step by step |
-| [**All tools**](docs/tools.md) | What every tool does and when to use it |
-| [**Configuration**](docs/configuration.md) | Environment variables and troubleshooting |
-| [**Architecture**](docs/architecture.md) | How the pieces fit together |
+The server discovers and runs already-installed commands, and IJM/Groovy can
+reach installed plugins that are scriptable. It does not install plugins or
+automate dialogs, menus, mouse input, or keyboard input. Plugins that require a
+GUI or cannot accept scripted parameters may fail in headless mode; use a
+scriptable route when available or restart with `FIJI_MODE=gui`.
 
----
+Fiji calls are serialized. Read-only operations receive at most one retry for
+explicitly allowlisted transient failures; image opening/saving, command
+execution, and script execution are never retried automatically after they are
+dispatched. If a mutation's result is unknown, inspect `get_state` or capture a
+`screenshot` before choosing whether to repeat it.
 
-**Author:** Suraj Sahu · UC Merced Physics · [ssahu2@ucmerced.edu](mailto:ssahu2@ucmerced.edu)
+For visual verification, save a `screenshot` before an operation and another
+after it, then pass those two saved paths to `compare_screenshots`. The
+comparison is stateless and reports image dimensions, a visual comparison, and
+same-size pixel metrics. Use `get_results(offset, limit)` for full tabular data:
+it preserves ImageJ column and row order, while a Results screenshot renders at
+most the first 100 rows.
 
-**Related:** [cellpose_mcp](https://github.com/surajinacademia/cellpose_mcp) · [PyImageJ](https://pyimagej.readthedocs.io/) · [FastMCP](https://github.com/jlowin/fastmcp)
+## Learn more
 
-**License:** BSD-3-Clause
+See the [nine-tool reference](docs/tools.md) for signatures and return fields,
+and [historical release notes](docs/releases/) for prior releases.

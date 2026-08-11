@@ -81,7 +81,13 @@ The server accepts only two runtime settings:
 - `FIJI_PATH` is required and must point to a Fiji root containing `jars/` and `plugins/`.
 - `FIJI_MODE` is optional, accepts `headless` or `gui`, and defaults to `headless`.
 
-There is no automatic Fiji-path or Java-path discovery. PyImageJ and the local Java environment remain responsible for JVM availability. A missing or invalid `FIJI_PATH` fails with one short setup instruction before any scientific operation is attempted.
+There is no automatic Fiji-path discovery. Before importing or initializing
+ImageJ, the bridge prefers exactly one valid JVM packaged under the current
+platform bucket in `FIJI_PATH/java/`; it preserves a caller-configured SciJava
+`jvmpath`, falls back to SciJava's normal JVM selection when no matching bundle
+exists, and fails clearly rather than guessing when several valid bundled JVMs
+exist. A missing or invalid `FIJI_PATH` fails with one short setup instruction
+before any scientific operation is attempted.
 
 The published console entry point remains `fiji-mcp-server`. Documentation provides one generic stdio MCP configuration block that users can adapt to any compliant client. The `fiji-mcp-install` command is removed.
 
