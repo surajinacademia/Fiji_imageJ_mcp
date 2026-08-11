@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fiji_mcp.bridge import (
     FijiError,
@@ -317,3 +317,439 @@ def save_image(path: str) -> dict[str, Any]:
         }
 
     return run_mutation("save_image", prepare, dispatch)
+
+
+_COMMAND_LIMIT_MIN = 1
+_COMMAND_LIMIT_MAX = 100
+_LOG_TAIL_CHARS = 4_000
+
+
+def _command_text(value: Any) -> str:
+    """Return one normalized string from command metadata."""
+    return "" if value is None else str(value).strip()
+
+
+def _command_sort_key(command: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+    name = _command_text(command.get("name"))
+    class_name = _command_text(command.get("class_name"))
+    menu_path = _command_text(command.get("menu_path"))
+    return (
+        name.casefold(),
+        name,
+        class_name.casefold(),
+        class_name,
+        menu_path.casefold(),
+        menu_path,
+    )
+
+
+def _public_command(command: dict[str, Any]) -> dict[str, Any]:
+    """Drop bridge-local metadata before returning a catalog record."""
+    return {key: value for key, value in command.items() if not key.startswith("_")}
+
+
+def _command_service(ij: Any) -> Any:
+    """Resolve the supported SciJava command service from Fiji's context."""
+    import scyjava as sj
+
+    command_service = sj.jimport("org.scijava.command.CommandService")
+    return ij.context().service(command_service)
+
+
+def _imagej1_menus() -> Any:
+    """Resolve the ImageJ1 menu registry class through the supported bridge."""
+    import scyjava as sj
+
+    return sj.jimport("ij.Menus")
+
+
+def _input_type_name(item: Any) -> str:
+    input_type = item.getType()
+    get_name = getattr(input_type, "getName", None)
+    return _command_text(get_name() if callable(get_name) else input_type)
+
+
+def _scijava_input_metadata(command_info: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": _command_text(item.getName()),
+            "type": _input_type_name(item),
+            "required": bool(item.isRequired()),
+            "description": _command_text(item.getDescription()),
+        }
+        for item in command_info.inputs()
+    ]
+
+
+def _deduplicate_commands(commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prefer SciJava records for a shared non-empty delegate class."""
+    deduplicated: list[dict[str, Any]] = []
+    class_indexes: dict[str, int] = {}
+    for command in commands:
+        class_name = _command_text(command.get("class_name"))
+        if not class_name:
+            deduplicated.append(command)
+            continue
+
+        existing_index = class_indexes.get(class_name)
+        if existing_index is None:
+            class_indexes[class_name] = len(deduplicated)
+            deduplicated.append(command)
+            continue
+
+        existing = deduplicated[existing_index]
+        candidate_key = (
+            0 if command.get("family") == "scijava" else 1,
+            _command_sort_key(command),
+        )
+        existing_key = (
+            0 if existing.get("family") == "scijava" else 1,
+            _command_sort_key(existing),
+        )
+        if candidate_key < existing_key:
+            deduplicated[existing_index] = command
+
+    return sorted(deduplicated, key=_command_sort_key)
+
+
+def _collect_commands(ij: Any) -> list[dict[str, Any]]:
+    """Merge the SciJava registry and ImageJ1 menu registry deterministically."""
+    service = _command_service(ij)
+    commands: list[dict[str, Any]] = []
+    for command_info in service.getCommands():
+        name = _command_text(command_info.getTitle())
+        commands.append(
+            {
+                "name": name,
+                "class_name": _command_text(command_info.getDelegateClassName()),
+                "menu_path": _command_text(command_info.getMenuPath()),
+                "family": "scijava",
+                "invocation_route": "structured_parameters",
+                "inputs": _scijava_input_metadata(command_info),
+                "_command_info": command_info,
+                "_command_service": service,
+            }
+        )
+
+    for entry in _imagej1_menus().getCommands().entrySet():
+        name = _command_text(entry.getKey())
+        commands.append(
+            {
+                "name": name,
+                "class_name": _command_text(entry.getValue()),
+                "menu_path": "",
+                "family": "imagej1",
+                "invocation_route": ("legacy_options" if name else "script_fallback"),
+                "inputs": [],
+            }
+        )
+    return _deduplicate_commands(commands)
+
+
+def _command_candidates_text(commands: list[dict[str, Any]]) -> str:
+    candidates = sorted(
+        {
+            _command_text(command.get("class_name"))
+            or _command_text(command.get("name"))
+            or "<unnamed command>"
+            for command in commands
+        },
+        key=lambda candidate: (candidate.casefold(), candidate),
+    )
+    return ", ".join(candidates)
+
+
+def _ambiguous_command(name: str, candidates: list[dict[str, Any]]) -> FijiError:
+    return _failed(
+        "ambiguous_command",
+        f"Command '{name}' is ambiguous. Candidate classes: "
+        f"{_command_candidates_text(candidates)}.",
+        "Use an exact delegate class from search_commands and retry.",
+    )
+
+
+def _resolve_command(commands: list[dict[str, Any]], name: str) -> dict[str, Any]:
+    """Resolve by exact class, exact title, then unique case-insensitive title."""
+    target = _command_text(name)
+    class_matches = [
+        command
+        for command in commands
+        if _command_text(command.get("class_name")) == target
+    ]
+    if len(class_matches) == 1:
+        return class_matches[0]
+    if len(class_matches) > 1:
+        raise _ambiguous_command(target, class_matches)
+
+    exact_name_matches = [
+        command for command in commands if _command_text(command.get("name")) == target
+    ]
+    if len(exact_name_matches) == 1:
+        return exact_name_matches[0]
+    if len(exact_name_matches) > 1:
+        raise _ambiguous_command(target, exact_name_matches)
+
+    folded_target = target.casefold()
+    folded_name_matches = [
+        command
+        for command in commands
+        if _command_text(command.get("name")).casefold() == folded_target
+    ]
+    if len(folded_name_matches) == 1:
+        return folded_name_matches[0]
+    if len(folded_name_matches) > 1:
+        raise _ambiguous_command(target, folded_name_matches)
+
+    raise _failed(
+        "command_not_found",
+        f"No command matches '{target}'.",
+        "Use search_commands to find an exact command name or delegate class and retry.",
+    )
+
+
+def _invocation_route(command: dict[str, Any]) -> str:
+    route = command.get("invocation_route")
+    if route in {"structured_parameters", "legacy_options", "script_fallback"}:
+        return str(route)
+    if command.get("family") == "scijava":
+        return "structured_parameters"
+    if command.get("family") == "imagej1":
+        return "legacy_options"
+    return "script_fallback"
+
+
+def _validate_route_inputs(
+    command: dict[str, Any],
+    *,
+    parameters: dict[str, Any] | None,
+    options: str | None,
+) -> str:
+    """Reject inputs that cannot be safely dispatched through this route."""
+    route = _invocation_route(command)
+    name = _command_text(command.get("name")) or "the selected command"
+    if route == "script_fallback":
+        raise _failed(
+            "invalid_parameter",
+            f"Command '{name}' requires a script fallback; use run_script instead.",
+            "Use run_script with IJM or Groovy for this command.",
+        )
+    if route == "legacy_options" and parameters is not None:
+        raise _failed(
+            "invalid_parameter",
+            f"Command '{name}' accepts a legacy options string; use run_script "
+            "for structured or custom input.",
+            "Pass options=... for this ImageJ1 command, or use run_script.",
+        )
+    if route == "structured_parameters" and options is not None:
+        raise _failed(
+            "invalid_parameter",
+            f"Command '{name}' accepts structured parameters; use run_script "
+            "for a legacy options string.",
+            "Pass parameters={...} for this SciJava command, or use run_script.",
+        )
+    return route
+
+
+def _validate_command_arguments(
+    name: str,
+    parameters: dict[str, Any] | None,
+    options: str | None,
+) -> str:
+    if not isinstance(name, str) or not name.strip():
+        raise _failed(
+            "invalid_parameter",
+            "name must be a non-empty command name or delegate class.",
+            "Use search_commands to find a command name or delegate class and retry.",
+        )
+    if parameters is not None and not isinstance(parameters, dict):
+        raise _failed(
+            "invalid_parameter",
+            "parameters must be a dictionary when provided.",
+            "Pass structured parameters as a dictionary or use options for ImageJ1.",
+        )
+    if options is not None and not isinstance(options, str):
+        raise _failed(
+            "invalid_parameter",
+            "options must be a string when provided.",
+            "Pass a legacy options string or use structured parameters for SciJava.",
+        )
+    if parameters is not None and options is not None:
+        raise _failed(
+            "invalid_parameter",
+            "parameters and options are mutually exclusive.",
+            "Pass structured parameters or one legacy options string, not both.",
+        )
+    return name.strip()
+
+
+def _active_image_after_execution(ij: Any) -> dict[str, Any] | None:
+    image = ij.WindowManager.getCurrentImage()
+    return image_summary(image) if image is not None else None
+
+
+def _log_tail(ij: Any) -> str:
+    log = ij.IJ.getLog()
+    return "" if log is None else str(log)[-_LOG_TAIL_CHARS:]
+
+
+def _command_info_for(ij: Any, command: dict[str, Any]) -> tuple[Any, Any]:
+    """Return the catalogued SciJava service and its exact CommandInfo."""
+    command_info = command.get("_command_info")
+    service = command.get("_command_service")
+    if command_info is not None and service is not None:
+        return service, command_info
+
+    service = _command_service(ij)
+    class_name = _command_text(command.get("class_name"))
+    name = _command_text(command.get("name"))
+    matches = [
+        info
+        for info in service.getCommands()
+        if _command_text(info.getDelegateClassName()) == class_name
+        and _command_text(info.getTitle()) == name
+    ]
+    if len(matches) == 1:
+        return service, matches[0]
+    raise _failed(
+        "command_not_found",
+        f"SciJava metadata for command '{name}' is no longer available.",
+        "Run search_commands again and choose an exact command name or delegate class.",
+    )
+
+
+def _command_response(
+    ij: Any,
+    command: dict[str, Any],
+    route: str,
+    outputs: Any,
+) -> dict[str, Any]:
+    return {
+        "name": _command_text(command.get("name")),
+        "class_name": _command_text(command.get("class_name")),
+        "family": _command_text(command.get("family")),
+        "invocation_route": route,
+        "outputs": to_jsonable(outputs),
+        "log_tail": _log_tail(ij),
+        "active_image": _active_image_after_execution(ij),
+    }
+
+
+def search_commands(query: str, limit: int = 20) -> dict[str, Any]:
+    """Search the deterministic Fiji command catalog by metadata substring."""
+    if not isinstance(query, str):
+        raise _failed(
+            "invalid_parameter",
+            "query must be a string.",
+            "Pass a command name, class, menu-path fragment, or an empty string.",
+        )
+    if (
+        isinstance(limit, bool)
+        or not isinstance(limit, int)
+        or not (_COMMAND_LIMIT_MIN <= limit <= _COMMAND_LIMIT_MAX)
+    ):
+        raise _failed(
+            "invalid_parameter",
+            "limit must be between 1 and 100.",
+            "Use a limit from 1 through 100 and retry.",
+        )
+    needle = query.strip().casefold()
+
+    def search(ij: Any) -> dict[str, Any]:
+        catalog = _deduplicate_commands(_collect_commands(ij))
+        matches = [
+            command
+            for command in catalog
+            if needle in _command_text(command.get("name")).casefold()
+            or needle in _command_text(command.get("class_name")).casefold()
+            or needle in _command_text(command.get("menu_path")).casefold()
+        ]
+        returned = [_public_command(command) for command in matches[:limit]]
+        return {
+            "query": query,
+            "returned": len(returned),
+            "total": len(matches),
+            "commands": returned,
+        }
+
+    return run_read("search_commands", search)
+
+
+def run_command(
+    name: str,
+    parameters: dict[str, Any] | None = None,
+    options: str | None = None,
+) -> dict[str, Any]:
+    """Run one resolved SciJava or ImageJ1 command exactly once."""
+    target = _validate_command_arguments(name, parameters, options)
+
+    def prepare(ij: Any) -> tuple[dict[str, Any], str, Any | None, Any | None]:
+        command = _resolve_command(_deduplicate_commands(_collect_commands(ij)), target)
+        route = _validate_route_inputs(
+            command,
+            parameters=parameters,
+            options=options,
+        )
+        if route == "structured_parameters":
+            service, command_info = _command_info_for(ij, command)
+            return command, route, service, command_info
+        return command, route, None, None
+
+    def dispatch(
+        ij: Any,
+        prepared: tuple[dict[str, Any], str, Any | None, Any | None],
+    ) -> dict[str, Any]:
+        command, route, service, command_info = prepared
+        if route == "structured_parameters":
+            assert service is not None
+            assert command_info is not None
+            input_map = ij.py.to_java(parameters or {})
+            command_module = service.run(command_info, True, input_map).get()
+            return _command_response(
+                ij,
+                command,
+                route,
+                command_module.getOutputs(),
+            )
+
+        ij.IJ.run(_command_text(command.get("name")), options or "")
+        return _command_response(ij, command, route, None)
+
+    return run_mutation("run_command", prepare, dispatch)
+
+
+def _validate_script_arguments(language: str, code: str) -> str:
+    if not isinstance(language, str) or language not in {"ijm", "groovy"}:
+        raise _failed(
+            "unsupported_language",
+            "language must be ijm or groovy.",
+            "Use language='ijm' or language='groovy' and retry.",
+        )
+    if not isinstance(code, str) or not code.strip():
+        raise _failed(
+            "invalid_parameter",
+            "code must be a non-empty script string.",
+            "Provide non-empty IJM or Groovy code and retry.",
+        )
+    return language
+
+
+def run_script(language: Literal["ijm", "groovy"], code: str) -> dict[str, Any]:
+    """Run one IJM macro or Groovy script exactly once."""
+    selected_language = _validate_script_arguments(language, code)
+
+    def prepare(_ij: Any) -> str:
+        return selected_language
+
+    def dispatch(ij: Any, prepared_language: str) -> dict[str, Any]:
+        if prepared_language == "ijm":
+            result = ij.py.run_macro(code)
+        else:
+            result = ij.py.run_script("groovy", code)
+        return {
+            "language": prepared_language,
+            "result": to_jsonable(result),
+            "log_tail": _log_tail(ij),
+            "active_image": _active_image_after_execution(ij),
+        }
+
+    return run_mutation("run_script", prepare, dispatch)
