@@ -173,7 +173,14 @@ def test_test_and_dev_tooling_are_minimal() -> None:
         "integration: integration tests requiring local Fiji runtime",
         "mcp_stdio: subprocess MCP client over stdio (FastMCP Client)",
     ]
-    assert project["tool"]["mypy"]["no_site_packages"] is True
+    assert "no_site_packages" not in project["tool"]["mypy"]
+    assert project["tool"]["mypy"]["overrides"] == [
+        {
+            "module": ["numpy", "numpy.*"],
+            "follow_imports": "skip",
+            "follow_imports_for_stubs": True,
+        }
+    ]
     assert "black" not in project["tool"]
     assert not Path(".coveragerc").exists()
 
