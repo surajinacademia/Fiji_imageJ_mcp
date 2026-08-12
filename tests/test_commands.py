@@ -335,6 +335,18 @@ def test_search_allows_empty_query_and_caps_limit(monkeypatch):
         minimal.search_commands("", limit=101)
 
 
+def test_search_consumes_the_collector_catalog_without_rededuplicating(monkeypatch):
+    monkeypatch.setattr(minimal, "_collect_commands", lambda _ij: COMMANDS)
+    monkeypatch.setattr(
+        minimal,
+        "_deduplicate_commands",
+        lambda _commands: pytest.fail("collector output was deduplicated twice"),
+    )
+    monkeypatch.setattr(minimal, "run_read", lambda _name, fn: fn(object()))
+
+    assert minimal.search_commands("Blur")["returned"] == 1
+
+
 def test_search_query_is_required_even_when_empty_is_valid():
     with pytest.raises(TypeError):
         minimal.search_commands()  # type: ignore[call-arg]
@@ -691,6 +703,36 @@ def test_run_command_rejects_parameters_and_options_together():
     assert raised.value.code == "invalid_parameter"
     assert raised.value.retryable is False
     assert raised.value.outcome is Outcome.FAILED
+
+
+def test_run_command_consumes_the_collector_catalog_without_rededuplicating(
+    monkeypatch,
+):
+    catalog = [
+        {
+            "name": "Invert",
+            "class_name": "ij.plugin.filter.Filters",
+            "menu_path": "Edit > Invert",
+            "family": "imagej1",
+            "inputs": [],
+            "invocation_route": "legacy_options",
+            "_legacy_descriptor": 'ij.plugin.filter.Filters("invert")',
+        }
+    ]
+    monkeypatch.setattr(minimal, "_collect_commands", lambda _ij: catalog)
+    monkeypatch.setattr(
+        minimal,
+        "_deduplicate_commands",
+        lambda _commands: pytest.fail("collector output was deduplicated twice"),
+    )
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda _name, prepare, _dispatch: prepare(object()),
+    )
+
+    prepared = minimal.run_command("Invert")
+    assert prepared[0] is catalog[0]
 
 
 def test_run_command_rejects_input_for_the_wrong_route():

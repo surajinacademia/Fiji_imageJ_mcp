@@ -844,7 +844,7 @@ def search_commands(query: str, limit: int = 20) -> dict[str, Any]:
     needle = query.strip().casefold()
 
     def search(ij: Any) -> dict[str, Any]:
-        catalog = _deduplicate_commands(_collect_commands(ij))
+        catalog = _collect_commands(ij)
         matches = [
             command
             for command in catalog
@@ -874,7 +874,7 @@ def run_command(
     def prepare(
         ij: Any,
     ) -> tuple[dict[str, Any], str, Any | None, Any | None, Any | None]:
-        command = _resolve_command(_deduplicate_commands(_collect_commands(ij)), target)
+        command = _resolve_command(_collect_commands(ij), target)
         route = _validate_route_inputs(
             command,
             parameters=parameters,
