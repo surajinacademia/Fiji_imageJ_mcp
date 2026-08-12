@@ -189,7 +189,7 @@ to retry.
 - [FastMCP](https://gofastmcp.com/)
 - README-structure inspiration: [Cellpose MCP](https://github.com/surajinacademia/cellpose_mcp)
 - Related minimal viewer bridge: [napari-mcp](https://github.com/royerlab/napari-mcp)
-- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md) and [historical release notes](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/)
+- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md)
 
 ## License
 

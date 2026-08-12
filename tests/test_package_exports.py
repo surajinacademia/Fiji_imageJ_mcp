@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -141,7 +142,7 @@ def test_runtime_dependencies_are_minimal():
     project = tomllib.loads(Path("pyproject.toml").read_text())
     assert project["project"]["version"] == "0.2.0"
     assert project["project"]["dependencies"] == [
-        "fastmcp>=2.10.3",
+        "fastmcp>=2.10.3,<3",
         "pyimagej>=1.5.0",
         "numpy>=1.26.0",
         "Pillow>=10.0.0",
@@ -203,6 +204,72 @@ def test_source_distribution_manifest_is_minimal() -> None:
     ]
 
 
+def test_repository_surface_is_lean_and_local_rules_are_ignored() -> None:
+    for required in (
+        "README.md",
+        "docs/tools.md",
+        "CHANGELOG.md",
+        "RELEASING.md",
+        "LICENSE",
+    ):
+        assert Path(required).is_file()
+
+    git = shutil.which("git")
+    assert git is not None
+    tracked = set(
+        subprocess.run(  # noqa: S603 - exact local Git query
+            [git, "ls-files"],
+            cwd=_REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    )
+    deleted = set(
+        subprocess.run(  # noqa: S603 - exact local Git query
+            [git, "diff", "HEAD", "--name-only", "--diff-filter=D"],
+            cwd=_REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    )
+    tracked -= deleted
+    for removed in (
+        "AGENTS.md",
+        ".agents",
+        ".codex",
+        "CLAUDE.md",
+        ".mcp.json",
+        "tests.md",
+        "docs/releases",
+        "docs/superpowers",
+    ):
+        assert not any(
+            path == removed or path.startswith(f"{removed}/") for path in tracked
+        )
+    assert not any(
+        path == ".coverage" or path.startswith(".coverage.") for path in tracked
+    )
+
+    ignored = set(Path(".gitignore").read_text().splitlines())
+    assert {
+        "/AGENTS.md",
+        "/.agents/",
+        "/.codex/",
+        "/CLAUDE.md",
+        "/.mcp.json",
+        "/tests.md",
+        "/.coverage",
+        "/.coverage.*",
+    } <= ignored
+
+    readme = Path("README.md").read_text()
+    releasing = Path("RELEASING.md").read_text()
+    assert "docs/releases" not in readme
+    assert "docs/releases" not in releasing
+
+
 def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
     readme = Path("README.md").read_text()
     json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
@@ -254,9 +321,5 @@ def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
     )
     assert (
         "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md"
-        in readme
-    )
-    assert (
-        "https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/"
         in readme
     )

@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "fastmcp>=2.10.3",
+    "fastmcp>=2.10.3,<3",
     "pyimagej>=1.5.0",
     "numpy>=1.26.0",
     "Pillow>=10.0.0",
