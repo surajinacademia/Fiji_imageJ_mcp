@@ -61,6 +61,17 @@ def _save_failed(message: str) -> FijiError:
     )
 
 
+def _script_failed(error_text: str) -> FijiError:
+    detail = error_text.strip()[-_LOG_TAIL_CHARS:]
+    return FijiError(
+        "script_failed",
+        f"Groovy script failed: {detail}",
+        retryable=False,
+        outcome=Outcome.UNKNOWN,
+        recovery="Correct the reported Groovy error, inspect Fiji state, and retry.",
+    )
+
+
 def _resolve_path(path: str) -> Path:
     if not isinstance(path, str) or not path.strip():
         raise _failed(
@@ -777,6 +788,29 @@ def _run_ijm_macro(ij: Any, code: str) -> tuple[Any, str]:
             pass
 
 
+def _run_groovy_script(ij: Any, code: str) -> Any:
+    """Run one SciJava Groovy module synchronously on the bridge thread."""
+    import scyjava as sj
+
+    script_info = sj.jimport("org.scijava.script.ScriptInfo")
+    string_reader = sj.jimport("java.io.StringReader")
+    string_writer = sj.jimport("java.io.StringWriter")
+    info = script_info(ij.context(), "fiji-mcp.groovy", string_reader(code))
+    # SciJava 2.100.0 initializes ScriptInfo parameter maps lazily via inputs().
+    info.inputs()
+    info.parseParameters()
+    module = info.createModule()
+    module.setContext(ij.context())
+    module.initialize()
+    errors = string_writer()
+    module.setErrorWriter(errors)
+    module.run()
+    error_text = str(errors.toString())
+    if error_text.strip():
+        raise _script_failed(error_text)
+    return module.getOutputs()
+
+
 def _combined_log_tail(log_tail: str, captured_stdout: str) -> str:
     return f"{log_tail}{captured_stdout}"[-_LOG_TAIL_CHARS:]
 
@@ -936,7 +970,7 @@ def run_script(language: Literal["ijm", "groovy"], code: str) -> dict[str, Any]:
         if prepared_language == "ijm":
             result, captured_stdout = _run_ijm_macro(ij, code)
         else:
-            result = ij.py.run_script("groovy", code)
+            result = _run_groovy_script(ij, code)
         return {
             "language": prepared_language,
             "result": to_jsonable(result),
