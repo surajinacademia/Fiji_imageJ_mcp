@@ -31,13 +31,3 @@ repos:
           - types-Pillow
         args: [--ignore-missing-imports]
         files: ^src/
-
-  - repo: local
-    hooks:
-      - id: pytest-quick
-        name: Quick pytest smoke tests
-        entry: bash -c 'if command -v pytest &> /dev/null; then pytest tests/test_package_exports.py -q --tb=short -x 2>/dev/null || true; fi'
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-        verbose: false

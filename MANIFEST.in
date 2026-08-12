@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include RELEASING.md
+include docs/tools.md
+prune tests
+prune docs/releases
+prune docs/superpowers
+exclude CLAUDE.md
+exclude .mcp.json
+exclude AGENTS.md
+exclude tests.md
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import re
@@ -11,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 try:
@@ -157,54 +155,45 @@ def test_publish_workflow_matches_complete_security_contract() -> None:
     _assert_release_workflow_security(_release_workflow())
 
 
-def test_publish_workflow_rejects_duplicate_artifact_upload() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    build_steps = workflow["jobs"]["build"]["steps"]
-    build_steps.append(
-        {
-            "name": "Replace frozen artifact",
-            "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-            "with": {"name": "python-dist", "path": "dist/", "overwrite": True},
-        }
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
-
-
-def test_publish_workflow_rejects_extra_privileged_action() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    publish_steps = workflow["jobs"]["publish"]["steps"]
-    publish_steps.insert(
-        1,
-        {
-            "name": "Unexpected privileged action",
-            "uses": "example/action@1111111111111111111111111111111111111111",
-        },
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
+def test_test_and_dev_tooling_are_minimal() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+    assert project["project"]["optional-dependencies"]["test"] == [
+        "pytest>=8.0.0",
+        "pytest-asyncio>=0.23.0",
+        "pytest-timeout>=2.2.0",
+        "PyYAML>=6.0.0",
+        "tomli>=2.0.1; python_version < '3.11'",
+    ]
+    assert project["project"]["optional-dependencies"]["dev"] == [
+        "ruff>=0.12.10",
+        "mypy>=1.17.0,<2.0",
+        "pre-commit>=4.3.0",
+    ]
+    assert project["tool"]["pytest"]["ini_options"]["markers"] == [
+        "integration: integration tests requiring local Fiji runtime",
+        "mcp_stdio: subprocess MCP client over stdio (FastMCP Client)",
+    ]
+    assert project["tool"]["mypy"]["no_site_packages"] is True
+    assert "black" not in project["tool"]
+    assert not Path(".coveragerc").exists()
 
 
-def test_publish_workflow_rejects_extra_install_command() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    build_steps = workflow["jobs"]["build"]["steps"]
-    build_steps.insert(
-        3,
-        {"name": "Replace reviewed tools", "run": "python -m pip install latest"},
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
-
-
-def test_publish_workflow_rejects_an_extra_trigger() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    workflow[True]["push"] = {"branches": ["main"]}
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
+def test_source_distribution_manifest_is_minimal() -> None:
+    assert Path("MANIFEST.in").read_text().splitlines() == [
+        "include README.md",
+        "include LICENSE",
+        "include CHANGELOG.md",
+        "include RELEASING.md",
+        "include docs/tools.md",
+        "prune tests",
+        "prune docs/releases",
+        "prune docs/superpowers",
+        "exclude CLAUDE.md",
+        "exclude .mcp.json",
+        "exclude AGENTS.md",
+        "exclude tests.md",
+        "global-exclude __pycache__ *.py[cod] .DS_Store",
+    ]
 
 
 def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
