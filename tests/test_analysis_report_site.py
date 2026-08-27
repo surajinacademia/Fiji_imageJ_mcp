@@ -15,16 +15,19 @@ class _ReportParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.paths: list[str] = []
+        self.comparison_figures = 0
         self.tbody_depth = 0
         self.tbody_rows = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "figure" and "comparison" in attributes.get("class", "").split():
+            self.comparison_figures += 1
         if tag == "tbody":
             self.tbody_depth += 1
         elif tag == "tr" and self.tbody_depth:
             self.tbody_rows += 1
 
-        attributes = dict(attrs)
         attribute = "src" if tag in {"img", "script"} else "href"
         value = attributes.get(attribute)
         if value:
@@ -66,10 +69,9 @@ def test_page_is_self_contained_and_privacy_safe() -> None:
 
 def test_page_has_exactly_five_original_and_red_boundary_pairs() -> None:
     html = (REPORT / "index.html").read_text()
-    assert html.count('<figure class="comparison">') == 5
-
     parser = _ReportParser()
     parser.feed(html)
+    assert parser.comparison_figures == 5
     image_paths = [value for value in parser.paths if value.endswith(".png")]
     expected = []
     for stem in SELECTED:
