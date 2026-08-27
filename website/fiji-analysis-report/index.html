@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Five original microscopy images beside their Fiji particle-analysis results.">
+  <title>Fiji image comparisons</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/report.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Fiji image comparisons</h1>
+    <p>Five original images beside their Fiji results with red detected-object boundaries; thresholded pixels are the percentage of all image pixels selected before object-size filtering.</p>
+  </header>
+
+  <div class="comparisons">
+    <figure class="comparison">
+      <figcaption>img00.png</figcaption>
+      <div class="pair">
+        <div class="panel"><span>Original</span><img src="assets/images/original/img00.png" alt="Original img00 microscopy image"></div>
+        <div class="panel"><span>Fiji</span><img src="assets/images/analyzed/img00.png" alt="Img00 analyzed by Fiji with red detected-object boundaries"></div>
+      </div>
+    </figure>
+
+    <figure class="comparison">
+      <figcaption>img05.png</figcaption>
+      <div class="pair">
+        <div class="panel"><span>Original</span><img src="assets/images/original/img05.png" alt="Original img05 microscopy image" loading="lazy"></div>
+        <div class="panel"><span>Fiji</span><img src="assets/images/analyzed/img05.png" alt="Img05 analyzed by Fiji with red detected-object boundaries" loading="lazy"></div>
+      </div>
+    </figure>
+
+    <figure class="comparison">
+      <figcaption>img10.png</figcaption>
+      <div class="pair">
+        <div class="panel"><span>Original</span><img src="assets/images/original/img10.png" alt="Original img10 microscopy image" loading="lazy"></div>
+        <div class="panel"><span>Fiji</span><img src="assets/images/analyzed/img10.png" alt="Img10 analyzed by Fiji with red detected-object boundaries" loading="lazy"></div>
+      </div>
+    </figure>
+
+    <figure class="comparison">
+      <figcaption>img14.png</figcaption>
+      <div class="pair">
+        <div class="panel"><span>Original</span><img src="assets/images/original/img14.png" alt="Original img14 microscopy image" loading="lazy"></div>
+        <div class="panel"><span>Fiji</span><img src="assets/images/analyzed/img14.png" alt="Img14 analyzed by Fiji with red detected-object boundaries" loading="lazy"></div>
+      </div>
+    </figure>
+
+    <figure class="comparison">
+      <figcaption>img21.png</figcaption>
+      <div class="pair">
+        <div class="panel"><span>Original</span><img src="assets/images/original/img21.png" alt="Original img21 microscopy image" loading="lazy"></div>
+        <div class="panel"><span>Fiji</span><img src="assets/images/analyzed/img21.png" alt="Img21 analyzed by Fiji with red detected-object boundaries" loading="lazy"></div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <caption>Fiji measurements</caption>
+      <thead><tr><th>Image</th><th>Objects</th><th>Otsu</th><th>Selection</th><th>Thresholded pixels</th><th>Data</th></tr></thead>
+      <tbody><tr><td>img00.png</td><td>75</td><td>43</td><td>bright</td><td>49.802%</td><td><a href="data/img00.csv">CSV</a></td></tr><tr><td>img05.png</td><td>85</td><td>47</td><td>bright</td><td>25.854%</td><td><a href="data/img05.csv">CSV</a></td></tr><tr><td>img10.png</td><td>168</td><td>57</td><td>bright</td><td>27.814%</td><td><a href="data/img10.csv">CSV</a></td></tr><tr><td>img14.png</td><td>101</td><td>174</td><td>dark</td><td>35.573%</td><td><a href="data/img14.csv">CSV</a></td></tr><tr><td>img21.png</td><td>3</td><td>68</td><td>bright</td><td>44.782%</td><td><a href="data/img21.csv">CSV</a></td></tr></tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>
