@@ -1,0 +1,213 @@
+@font-face {
+  font-family: "CMU Sans";
+  src: url("fonts/cmunss.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "CMU Typewriter";
+  src: url("fonts/cmuntt.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --black: #050505;
+  --white: #f1f1ed;
+  --gray: #9a9a95;
+  --rule: #343432;
+  --red: #ff2b2b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: #050505;
+  color: var(--white);
+  margin: 0;
+}
+
+body {
+  font-family: "CMU Sans", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 1240px;
+  padding: 56px 28px 88px;
+}
+
+header {
+  border-bottom: 2px solid var(--red);
+  display: flex;
+  gap: 28px;
+  justify-content: space-between;
+  margin-bottom: 72px;
+  padding-bottom: 22px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 4vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+p {
+  color: var(--gray);
+  max-width: 620px;
+}
+
+.comparisons {
+  display: grid;
+  gap: 76px;
+}
+
+.comparison {
+  margin: 0;
+}
+
+figcaption {
+  border-bottom: 1px solid var(--rule);
+  font-family: "CMU Typewriter", ui-monospace, monospace;
+  font-size: 0.78rem;
+  padding-bottom: 10px;
+}
+
+.pair {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel {
+  min-width: 0;
+  padding-top: 12px;
+}
+
+.panel + .panel {
+  border-left: 1px solid var(--rule);
+  padding-left: 18px;
+}
+
+.panel:first-child {
+  padding-right: 17px;
+}
+
+.panel span {
+  color: var(--gray);
+  display: block;
+  font-family: "CMU Typewriter", ui-monospace, monospace;
+  font-size: 0.7rem;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.panel:last-child span {
+  color: var(--red);
+}
+
+img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.table-wrap {
+  border-top: 2px solid var(--red);
+  margin-top: 84px;
+  overflow-x: auto;
+  padding-top: 16px;
+}
+
+table {
+  border-collapse: collapse;
+  font-family: "CMU Typewriter", ui-monospace, monospace;
+  font-size: 0.78rem;
+  width: 100%;
+}
+
+caption {
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--rule);
+  padding: 13px 14px 13px 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--gray);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+a {
+  color: var(--white);
+  text-decoration-color: var(--red);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--red);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  main {
+    padding: 36px 16px 60px;
+  }
+
+  header {
+    display: block;
+    margin-bottom: 48px;
+  }
+
+  header p {
+    margin-top: 14px;
+  }
+
+  .comparisons {
+    gap: 52px;
+  }
+
+  .pair {
+    grid-template-columns: 1fr;
+  }
+
+  .panel:first-child {
+    padding-right: 0;
+  }
+
+  .panel + .panel {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    margin-top: 18px;
+    padding-left: 0;
+    padding-top: 18px;
+  }
+}

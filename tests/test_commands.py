@@ -277,6 +277,47 @@ class FakePy:
         return self._java_map
 
 
+class FakeStringReader:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class FakeStringWriter:
+    def __init__(self) -> None:
+        self.text = ""
+
+    def write(self, text: str) -> None:
+        self.text += text
+
+    def toString(self) -> str:
+        return self.text
+
+
+class FakeGroovyModule:
+    def __init__(self, calls: list[str], outputs: dict[str, object]) -> None:
+        self.calls = calls
+        self.outputs = outputs
+        self.error_writer: FakeStringWriter | None = None
+
+    def setContext(self, context: object) -> None:
+        assert context == "context"
+        self.calls.append("context")
+
+    def initialize(self) -> None:
+        self.calls.append("initialize")
+
+    def setErrorWriter(self, writer: FakeStringWriter) -> None:
+        self.error_writer = writer
+        self.calls.append("writer")
+
+    def run(self) -> None:
+        self.calls.append("run")
+
+    def getOutputs(self) -> dict[str, object]:
+        self.calls.append("outputs")
+        return self.outputs
+
+
 class FakeIJ:
     def __init__(
         self,
@@ -333,6 +374,18 @@ def test_search_allows_empty_query_and_caps_limit(monkeypatch):
     assert len(minimal.search_commands("", limit=2)["commands"]) == 2
     with pytest.raises(FijiError, match="between 1 and 100"):
         minimal.search_commands("", limit=101)
+
+
+def test_search_consumes_the_collector_catalog_without_rededuplicating(monkeypatch):
+    monkeypatch.setattr(minimal, "_collect_commands", lambda _ij: COMMANDS)
+    monkeypatch.setattr(
+        minimal,
+        "_deduplicate_commands",
+        lambda _commands: pytest.fail("collector output was deduplicated twice"),
+    )
+    monkeypatch.setattr(minimal, "run_read", lambda _name, fn: fn(object()))
+
+    assert minimal.search_commands("Blur")["returned"] == 1
 
 
 def test_search_query_is_required_even_when_empty_is_valid():
@@ -693,6 +746,36 @@ def test_run_command_rejects_parameters_and_options_together():
     assert raised.value.outcome is Outcome.FAILED
 
 
+def test_run_command_consumes_the_collector_catalog_without_rededuplicating(
+    monkeypatch,
+):
+    catalog = [
+        {
+            "name": "Invert",
+            "class_name": "ij.plugin.filter.Filters",
+            "menu_path": "Edit > Invert",
+            "family": "imagej1",
+            "inputs": [],
+            "invocation_route": "legacy_options",
+            "_legacy_descriptor": 'ij.plugin.filter.Filters("invert")',
+        }
+    ]
+    monkeypatch.setattr(minimal, "_collect_commands", lambda _ij: catalog)
+    monkeypatch.setattr(
+        minimal,
+        "_deduplicate_commands",
+        lambda _commands: pytest.fail("collector output was deduplicated twice"),
+    )
+    monkeypatch.setattr(
+        minimal,
+        "run_mutation",
+        lambda _name, prepare, _dispatch: prepare(object()),
+    )
+
+    prepared = minimal.run_command("Invert")
+    assert prepared[0] is catalog[0]
+
+
 def test_run_command_rejects_input_for_the_wrong_route():
     with pytest.raises(FijiError, match="legacy options string.*run_script"):
         minimal._validate_route_inputs(
@@ -813,6 +896,142 @@ def test_run_command_dispatches_legacy_once_with_options(monkeypatch):
     assert result["outputs"] is None
 
 
+def test_run_groovy_script_runs_synchronously_and_preserves_outputs(monkeypatch):
+    calls: list[str] = []
+    module = FakeGroovyModule(calls, {"answer": FakeJavaInteger(42)})
+
+    class FakeScriptInfo:
+        def __init__(self, context, name, reader) -> None:
+            assert context == "context"
+            assert name == "fiji-mcp.groovy"
+            assert reader.text == "#@output Integer answer\nanswer = 42"
+
+        def inputs(self) -> list[object]:
+            calls.append("inputs")
+            return []
+
+        def parseParameters(self) -> None:
+            calls.append("parse")
+
+        def createModule(self) -> FakeGroovyModule:
+            calls.append("create")
+            return module
+
+    mapping = {
+        "java.io.StringReader": FakeStringReader,
+        "java.io.StringWriter": FakeStringWriter,
+        "org.scijava.script.ScriptInfo": FakeScriptInfo,
+    }
+    monkeypatch.setattr(sj, "jimport", mapping.__getitem__)
+    fake_ij = type("GroovyGateway", (), {"context": lambda self: "context"})()
+
+    outputs = minimal._run_groovy_script(
+        fake_ij, "#@output Integer answer\nanswer = 42"
+    )
+
+    assert outputs == {"answer": module.outputs["answer"]}
+    assert calls == [
+        "inputs",
+        "parse",
+        "create",
+        "context",
+        "initialize",
+        "writer",
+        "run",
+        "outputs",
+    ]
+
+
+def test_run_groovy_script_reports_captured_failure_as_unknown(monkeypatch):
+    calls: list[str] = []
+    module = FakeGroovyModule(calls, {})
+    original_run = module.run
+
+    def fail_run() -> None:
+        original_run()
+        assert module.error_writer is not None
+        module.error_writer.write("x" * 5_000)
+
+    module.run = fail_run  # type: ignore[method-assign]
+
+    class FakeScriptInfo:
+        def __init__(self, _context, _name, _reader) -> None:
+            pass
+
+        def inputs(self) -> list[object]:
+            calls.append("inputs")
+            return []
+
+        def parseParameters(self) -> None:
+            calls.append("parse")
+
+        def createModule(self) -> FakeGroovyModule:
+            calls.append("create")
+            return module
+
+    mapping = {
+        "java.io.StringReader": FakeStringReader,
+        "java.io.StringWriter": FakeStringWriter,
+        "org.scijava.script.ScriptInfo": FakeScriptInfo,
+    }
+    monkeypatch.setattr(sj, "jimport", mapping.__getitem__)
+    fake_ij = type("GroovyGateway", (), {"context": lambda self: "context"})()
+
+    with pytest.raises(FijiError) as raised:
+        minimal._run_groovy_script(fake_ij, "throw new RuntimeException('x')")
+
+    assert raised.value.code == "script_failed"
+    assert raised.value.retryable is False
+    assert raised.value.outcome is Outcome.UNKNOWN
+    assert len(raised.value.message) <= 4_040
+
+
+def test_run_groovy_script_maps_raised_module_error_to_captured_failure(monkeypatch):
+    calls: list[str] = []
+    module = FakeGroovyModule(calls, {})
+    original_run = module.run
+
+    def fail_run() -> None:
+        original_run()
+        assert module.error_writer is not None
+        module.error_writer.write("captured-error\n" + "x" * 5_000)
+        raise RuntimeError("raw module failure")
+
+    module.run = fail_run  # type: ignore[method-assign]
+
+    class FakeScriptInfo:
+        def __init__(self, _context, _name, _reader) -> None:
+            pass
+
+        def inputs(self) -> list[object]:
+            return []
+
+        def parseParameters(self) -> None:
+            pass
+
+        def createModule(self) -> FakeGroovyModule:
+            return module
+
+    mapping = {
+        "java.io.StringReader": FakeStringReader,
+        "java.io.StringWriter": FakeStringWriter,
+        "org.scijava.script.ScriptInfo": FakeScriptInfo,
+    }
+    monkeypatch.setattr(sj, "jimport", mapping.__getitem__)
+    fake_ij = type("GroovyGateway", (), {"context": lambda self: "context"})()
+
+    with pytest.raises(FijiError) as raised:
+        minimal._run_groovy_script(fake_ij, "throw new RuntimeException('x')")
+
+    assert raised.value.code == "script_failed"
+    assert raised.value.retryable is False
+    assert raised.value.outcome is Outcome.UNKNOWN
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert "raw module failure" not in raised.value.message
+    assert raised.value.message.endswith("x" * 100)
+    assert len(raised.value.message) <= 4_040
+
+
 def test_run_script_dispatches_only_ijm_and_groovy(monkeypatch):
     service = FakeCommandService([])
     fake_ij = FakeIJ(
@@ -828,14 +1047,22 @@ def test_run_script_dispatches_only_ijm_and_groovy(monkeypatch):
         return FakeJavaInteger(11), ""
 
     monkeypatch.setattr(minimal, "_run_ijm_macro", run_ijm_macro, raising=False)
+    groovy_script_calls: list[str] = []
+
+    def run_groovy_script(_ij, code):
+        groovy_script_calls.append(code)
+        return FakeJavaInteger(12)
+
+    monkeypatch.setattr(minimal, "_run_groovy_script", run_groovy_script, raising=False)
 
     ijm = minimal.run_script("ijm", "return 11;")
     groovy = minimal.run_script("groovy", "return 12")
 
     assert ijm_macro_calls == ["return 11;"]
+    assert groovy_script_calls == ["return 12"]
     assert fake_ij.IJ.run_macro_calls == []
     assert fake_ij.py.run_macro_calls == []
-    assert fake_ij.py.run_script_calls == [("groovy", "return 12")]
+    assert fake_ij.py.run_script_calls == []
     assert ijm["result"] == 11
     assert groovy["result"] == 12
     assert ijm["log_tail"] == "log"

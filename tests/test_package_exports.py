@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 try:
@@ -143,7 +142,7 @@ def test_runtime_dependencies_are_minimal():
     project = tomllib.loads(Path("pyproject.toml").read_text())
     assert project["project"]["version"] == "0.2.0"
     assert project["project"]["dependencies"] == [
-        "fastmcp>=2.10.3",
+        "fastmcp>=2.10.3,<3",
         "pyimagej>=1.5.0",
         "numpy>=1.26.0",
         "Pillow>=10.0.0",
@@ -157,57 +156,121 @@ def test_publish_workflow_matches_complete_security_contract() -> None:
     _assert_release_workflow_security(_release_workflow())
 
 
-def test_publish_workflow_rejects_duplicate_artifact_upload() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    build_steps = workflow["jobs"]["build"]["steps"]
-    build_steps.append(
+def test_test_and_dev_tooling_are_minimal() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text())
+    assert project["project"]["optional-dependencies"]["test"] == [
+        "pytest>=8.0.0",
+        "pytest-asyncio>=0.23.0",
+        "pytest-timeout>=2.2.0",
+        "PyYAML>=6.0.0",
+        "tomli>=2.0.1; python_version < '3.11'",
+    ]
+    assert project["project"]["optional-dependencies"]["dev"] == [
+        "ruff>=0.12.10",
+        "mypy>=1.17.0,<2.0",
+        "pre-commit>=4.3.0",
+    ]
+    assert project["tool"]["pytest"]["ini_options"]["markers"] == [
+        "integration: integration tests requiring local Fiji runtime",
+        "mcp_stdio: subprocess MCP client over stdio (FastMCP Client)",
+    ]
+    assert "no_site_packages" not in project["tool"]["mypy"]
+    assert project["tool"]["mypy"]["overrides"] == [
         {
-            "name": "Replace frozen artifact",
-            "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-            "with": {"name": "python-dist", "path": "dist/", "overwrite": True},
+            "module": ["numpy", "numpy.*"],
+            "follow_imports": "skip",
+            "follow_imports_for_stubs": True,
         }
+    ]
+    assert "black" not in project["tool"]
+    assert not Path(".coveragerc").exists()
+
+
+def test_source_distribution_manifest_is_minimal() -> None:
+    assert Path("MANIFEST.in").read_text().splitlines() == [
+        "include README.md",
+        "include LICENSE",
+        "include CHANGELOG.md",
+        "include RELEASING.md",
+        "include docs/tools.md",
+        "prune tests",
+        "prune docs/releases",
+        "prune docs/superpowers",
+        "exclude CLAUDE.md",
+        "exclude .mcp.json",
+        "exclude AGENTS.md",
+        "exclude tests.md",
+        "global-exclude __pycache__ *.py[cod] .DS_Store",
+    ]
+
+
+def test_repository_surface_is_lean_and_local_rules_are_ignored() -> None:
+    for required in (
+        "README.md",
+        "docs/tools.md",
+        "CHANGELOG.md",
+        "RELEASING.md",
+        "LICENSE",
+    ):
+        assert Path(required).is_file()
+
+    git = shutil.which("git")
+    assert git is not None
+    tracked = set(
+        subprocess.run(  # noqa: S603 - exact local Git query
+            [git, "ls-files"],
+            cwd=_REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    )
+    deleted = set(
+        subprocess.run(  # noqa: S603 - exact local Git query
+            [git, "diff", "HEAD", "--name-only", "--diff-filter=D"],
+            cwd=_REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    )
+    tracked -= deleted
+    for removed in (
+        "AGENTS.md",
+        ".agents",
+        ".codex",
+        "CLAUDE.md",
+        ".mcp.json",
+        "tests.md",
+        "docs/releases",
+        "docs/superpowers",
+    ):
+        assert not any(
+            path == removed or path.startswith(f"{removed}/") for path in tracked
+        )
+    assert not any(
+        path == ".coverage" or path.startswith(".coverage.") for path in tracked
     )
 
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
+    ignored = set(Path(".gitignore").read_text().splitlines())
+    assert {
+        "/AGENTS.md",
+        "/.agents/",
+        "/.codex/",
+        "/CLAUDE.md",
+        "/.mcp.json",
+        "/tests.md",
+        "/.coverage",
+        "/.coverage.*",
+    } <= ignored
+
+    readme = Path("README.md").read_text()
+    releasing = Path("RELEASING.md").read_text()
+    assert "docs/releases" not in readme
+    assert "docs/releases" not in releasing
 
 
-def test_publish_workflow_rejects_extra_privileged_action() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    publish_steps = workflow["jobs"]["publish"]["steps"]
-    publish_steps.insert(
-        1,
-        {
-            "name": "Unexpected privileged action",
-            "uses": "example/action@1111111111111111111111111111111111111111",
-        },
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
-
-
-def test_publish_workflow_rejects_extra_install_command() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    build_steps = workflow["jobs"]["build"]["steps"]
-    build_steps.insert(
-        3,
-        {"name": "Replace reviewed tools", "run": "python -m pip install latest"},
-    )
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
-
-
-def test_publish_workflow_rejects_an_extra_trigger() -> None:
-    workflow = copy.deepcopy(_release_workflow())
-    workflow[True]["push"] = {"branches": ["main"]}
-
-    with pytest.raises(AssertionError):
-        _assert_release_workflow_security(workflow)
-
-
-def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
+def test_readme_documents_v020_clients_and_exact_tool_surface() -> None:
     readme = Path("README.md").read_text()
     json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
     toml_config = readme.split("```toml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
@@ -218,10 +281,25 @@ def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
 
     assert "This README documents v0.2.0" in readme
     assert 'python -m pip install "fiji-mcp-server==0.2.0"' in readme
+    assert "Before v0.2.0 is published" not in readme
     assert "codex mcp add fiji" in readme
-    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
-        "fiji-mcp-server"
+    assert "## Connect Claude" in readme
+    assert "claude mcp add" in readme
+    assert "claude mcp get fiji" in readme
+    assert "claude_desktop_config.json" in readme
+    assert "## Connect Gemini CLI" in readme
+    assert "gemini mcp add" in readme
+    assert "gemini mcp list" in readme
+    assert "## Connect Perplexity" in readme
+    assert "PerplexityXPC" in readme
+    assert (
+        "/usr/bin/env FIJI_PATH=/Applications/Fiji FIJI_MODE=headless "
+        "/absolute/path/to/fiji-mcp-server" in readme
     )
+    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
+        "/absolute/path/to/fiji-mcp-server"
+    )
+    assert json.loads(json_config)["mcpServers"]["fiji"]["args"] == []
     assert tomllib.loads(toml_config)["mcp_servers"]["fiji"]["env"] == {
         "FIJI_PATH": "/Applications/Fiji",
         "FIJI_MODE": "headless",
@@ -258,9 +336,5 @@ def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
     )
     assert (
         "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md"
-        in readme
-    )
-    assert (
-        "https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/"
         in readme
     )

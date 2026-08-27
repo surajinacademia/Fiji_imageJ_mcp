@@ -24,7 +24,7 @@ You need Python 3.10 or newer and a local
    python -m pip install "fiji-mcp-server==0.2.0"
    ```
 
-   Before v0.2.0 is published on PyPI, install from a source checkout instead:
+   To test a source checkout instead:
 
    ```bash
    python -m pip install .
@@ -72,16 +72,31 @@ choose **STDIO**, and then restart after saving. See the
 [official Codex MCP documentation](https://developers.openai.com/codex/mcp/)
 for current client controls.
 
-## Other JSON-based MCP clients
+## Connect Claude
 
-Many local MCP clients use this common JSON shape. Their configuration-file
-location and restart control are client-specific:
+For Claude Code, use the absolute path reported by `which fiji-mcp-server`:
+
+```bash
+claude mcp add \
+  --scope user \
+  --transport stdio \
+  fiji \
+  --env FIJI_PATH=/Applications/Fiji \
+  --env FIJI_MODE=headless \
+  -- /absolute/path/to/fiji-mcp-server
+claude mcp get fiji
+```
+
+For Claude Desktop, add this entry to `claude_desktop_config.json`. On macOS,
+the file is in `~/Library/Application Support/Claude/`. On Windows, it is in
+`%APPDATA%\Claude\`. Fully quit and reopen Claude Desktop after saving.
 
 ```json
 {
   "mcpServers": {
     "fiji": {
-      "command": "fiji-mcp-server",
+      "command": "/absolute/path/to/fiji-mcp-server",
+      "args": [],
       "env": {
         "FIJI_PATH": "/Applications/Fiji",
         "FIJI_MODE": "headless"
@@ -91,9 +106,41 @@ location and restart control are client-specific:
 }
 ```
 
-If the client cannot find `fiji-mcp-server`, replace `command` with the full
-path reported by `which fiji-mcp-server` (macOS/Linux) or
-`where fiji-mcp-server` (Windows).
+See the official [Claude Code MCP guide](https://code.claude.com/docs/en/mcp)
+and [Claude Desktop host guide](https://py.sdk.modelcontextprotocol.io/get-started/real-host/).
+
+## Connect Gemini CLI
+
+Gemini CLI supports the same local stdio server. User scope makes it available
+in all trusted projects:
+
+```bash
+gemini mcp add \
+  --scope user \
+  --transport stdio \
+  -e FIJI_PATH=/Applications/Fiji \
+  -e FIJI_MODE=headless \
+  fiji /absolute/path/to/fiji-mcp-server
+gemini mcp list
+```
+
+See the official [Gemini CLI MCP guide](https://geminicli.com/docs/tools/mcp-server/).
+
+## Connect Perplexity
+
+Local MCP is currently documented for the Perplexity macOS app from the Mac
+App Store. The feature is rolling out to paid subscribers. Open **Settings →
+Connectors**, install the **PerplexityXPC** helper, then select **Add Connector
+→ Simple**. Use `Fiji` as the server name and this command:
+
+```text
+/usr/bin/env FIJI_PATH=/Applications/Fiji FIJI_MODE=headless /absolute/path/to/fiji-mcp-server
+```
+
+Save the connector, wait for **Running**, and enable it under **Sources**.
+Perplexity does not currently document local MCP setup for Windows or
+standalone Comet. See the official
+[Perplexity local MCP guide](https://www.perplexity.ai/help-center/en/articles/11502712-local-and-remote-mcps-for-perplexity).
 
 ## Try these prompts
 
@@ -189,7 +236,7 @@ to retry.
 - [FastMCP](https://gofastmcp.com/)
 - README-structure inspiration: [Cellpose MCP](https://github.com/surajinacademia/cellpose_mcp)
 - Related minimal viewer bridge: [napari-mcp](https://github.com/royerlab/napari-mcp)
-- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md) and [historical release notes](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/docs/releases/)
+- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md)
 
 ## License
 

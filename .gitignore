@@ -9,11 +9,21 @@ env/
 .worktrees/
 .superpowers/sdd/
 
+# Local agent and MCP configuration
+/AGENTS.md
+/.agents/
+/.codex/
+/CLAUDE.md
+/.mcp.json
+/tests.md
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+/.coverage
+/.coverage.*
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
@@ -22,11 +32,3 @@ build/
 
 # OS
 .DS_Store
-
-# Batch report + large generated docs (created by scripts/generate_image_analysis_report.py)
-research_output/
-docs/fiji_mcp_comprehensive_image_analysis_report.md
-
-# Transient MCP monitor output (scripts/mcp_and_gui_fiji.py)
-demo_output/mcp_live/
-demo_output/mcp_live_test/

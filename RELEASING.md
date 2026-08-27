@@ -5,9 +5,7 @@
 1. Set the PEP 440 version in [`pyproject.toml`](pyproject.toml).
 2. Move the relevant entry from [the changelog](CHANGELOG.md) into a dated
    release section.
-3. Optionally add a release-note file under [`docs/releases/`](docs/releases/)
-   for the GitHub Release description.
-4. Run the local distribution validation:
+3. Run the local distribution validation:
 
    ```bash
    pip install ".[publish]"
