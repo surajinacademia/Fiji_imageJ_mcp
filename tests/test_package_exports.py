@@ -270,7 +270,7 @@ def test_repository_surface_is_lean_and_local_rules_are_ignored() -> None:
     assert "docs/releases" not in releasing
 
 
-def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
+def test_readme_documents_v020_clients_and_exact_tool_surface() -> None:
     readme = Path("README.md").read_text()
     json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
     toml_config = readme.split("```toml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
@@ -281,10 +281,25 @@ def test_readme_documents_v020_onboarding_and_exact_tool_surface() -> None:
 
     assert "This README documents v0.2.0" in readme
     assert 'python -m pip install "fiji-mcp-server==0.2.0"' in readme
+    assert "Before v0.2.0 is published" not in readme
     assert "codex mcp add fiji" in readme
-    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
-        "fiji-mcp-server"
+    assert "## Connect Claude" in readme
+    assert "claude mcp add" in readme
+    assert "claude mcp get fiji" in readme
+    assert "claude_desktop_config.json" in readme
+    assert "## Connect Gemini CLI" in readme
+    assert "gemini mcp add" in readme
+    assert "gemini mcp list" in readme
+    assert "## Connect Perplexity" in readme
+    assert "PerplexityXPC" in readme
+    assert (
+        "/usr/bin/env FIJI_PATH=/Applications/Fiji FIJI_MODE=headless "
+        "/absolute/path/to/fiji-mcp-server" in readme
     )
+    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
+        "/absolute/path/to/fiji-mcp-server"
+    )
+    assert json.loads(json_config)["mcpServers"]["fiji"]["args"] == []
     assert tomllib.loads(toml_config)["mcp_servers"]["fiji"]["env"] == {
         "FIJI_PATH": "/Applications/Fiji",
         "FIJI_MODE": "headless",

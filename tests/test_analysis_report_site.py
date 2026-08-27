@@ -11,23 +11,34 @@ REPORT = REPOSITORY / "website" / "fiji-analysis-report"
 SELECTED = ("img00", "img05", "img10", "img14", "img21")
 
 
-class _Links(HTMLParser):
+class _ReportParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.paths: list[str] = []
+        self.tbody_depth = 0
+        self.tbody_rows = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tbody":
+            self.tbody_depth += 1
+        elif tag == "tr" and self.tbody_depth:
+            self.tbody_rows += 1
+
         attributes = dict(attrs)
         attribute = "src" if tag in {"img", "script"} else "href"
         value = attributes.get(attribute)
         if value:
             self.paths.append(value)
 
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "tbody" and self.tbody_depth:
+            self.tbody_depth -= 1
+
 
 def test_page_is_self_contained_and_privacy_safe() -> None:
     index = REPORT / "index.html"
     assert index.is_file()
-    parser = _Links()
+    parser = _ReportParser()
     parser.feed(index.read_text())
 
     for value in parser.paths:
@@ -57,7 +68,7 @@ def test_page_has_exactly_five_original_and_red_boundary_pairs() -> None:
     html = (REPORT / "index.html").read_text()
     assert html.count('<figure class="comparison">') == 5
 
-    parser = _Links()
+    parser = _ReportParser()
     parser.feed(html)
     image_paths = [value for value in parser.paths if value.endswith(".png")]
     expected = []
@@ -85,12 +96,13 @@ def test_page_has_exactly_five_original_and_red_boundary_pairs() -> None:
 def test_page_is_minimal_black_cmu_and_red() -> None:
     html = (REPORT / "index.html").read_text()
     lowered_html = html.lower()
+    parser = _ReportParser()
+    parser.feed(html)
     assert html.count("<h1") == 1
     assert "<h2" not in html
     assert "<h3" not in html
     assert html.count("<p") == 1
-    assert html.count("<tbody><tr>") == 1
-    assert html.count("</tr><tr>") == 4
+    assert parser.tbody_rows == 5
     assert "cell boundaries" not in lowered_html
     assert "detected-object boundaries" in lowered_html
     assert "Thresholded pixels" in html

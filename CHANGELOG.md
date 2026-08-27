@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-27
+
+### Added
+
+- Add direct setup instructions for Codex, Claude Code, Claude Desktop, Gemini
+  CLI, and the Perplexity macOS app.
+- Add a minimal five-image Fiji analysis report with original and analyzed
+  image pairs, red detected-object boundaries, and measurement tables.
+
 ### Changed
 
 - **Breaking simplification:** replace the legacy framework with the exact
   nine-tool Fiji MCP surface: state, command discovery and execution,
   IJM/Groovy scripts, image I/O, Results pagination, screenshots, and
   path-based screenshot comparison.
+- Remove stale installers, agent files, generated files, and unused repository
+  tooling from the published project.
+
+### Fixed
+
+- Run Groovy against the active headless image on the serialized Fiji thread.
+- Return bounded `script_failed` details when a Groovy module raises during
+  execution.
 
 ## [0.1.3] - 2026-04-11
 

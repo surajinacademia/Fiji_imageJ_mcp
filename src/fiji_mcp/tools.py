@@ -804,7 +804,11 @@ def _run_groovy_script(ij: Any, code: str) -> Any:
     module.initialize()
     errors = string_writer()
     module.setErrorWriter(errors)
-    module.run()
+    try:
+        module.run()
+    except Exception as error:
+        error_text = str(errors.toString()).strip() or str(error)
+        raise _script_failed(error_text) from error
     error_text = str(errors.toString())
     if error_text.strip():
         raise _script_failed(error_text)

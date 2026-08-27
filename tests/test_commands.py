@@ -986,6 +986,52 @@ def test_run_groovy_script_reports_captured_failure_as_unknown(monkeypatch):
     assert len(raised.value.message) <= 4_040
 
 
+def test_run_groovy_script_maps_raised_module_error_to_captured_failure(monkeypatch):
+    calls: list[str] = []
+    module = FakeGroovyModule(calls, {})
+    original_run = module.run
+
+    def fail_run() -> None:
+        original_run()
+        assert module.error_writer is not None
+        module.error_writer.write("captured-error\n" + "x" * 5_000)
+        raise RuntimeError("raw module failure")
+
+    module.run = fail_run  # type: ignore[method-assign]
+
+    class FakeScriptInfo:
+        def __init__(self, _context, _name, _reader) -> None:
+            pass
+
+        def inputs(self) -> list[object]:
+            return []
+
+        def parseParameters(self) -> None:
+            pass
+
+        def createModule(self) -> FakeGroovyModule:
+            return module
+
+    mapping = {
+        "java.io.StringReader": FakeStringReader,
+        "java.io.StringWriter": FakeStringWriter,
+        "org.scijava.script.ScriptInfo": FakeScriptInfo,
+    }
+    monkeypatch.setattr(sj, "jimport", mapping.__getitem__)
+    fake_ij = type("GroovyGateway", (), {"context": lambda self: "context"})()
+
+    with pytest.raises(FijiError) as raised:
+        minimal._run_groovy_script(fake_ij, "throw new RuntimeException('x')")
+
+    assert raised.value.code == "script_failed"
+    assert raised.value.retryable is False
+    assert raised.value.outcome is Outcome.UNKNOWN
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert "raw module failure" not in raised.value.message
+    assert raised.value.message.endswith("x" * 100)
+    assert len(raised.value.message) <= 4_040
+
+
 def test_run_script_dispatches_only_ijm_and_groovy(monkeypatch):
     service = FakeCommandService([])
     fake_ij = FakeIJ(
