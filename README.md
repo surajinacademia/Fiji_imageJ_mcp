@@ -1,243 +1,102 @@
 # Fiji MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
-[![Python versions](https://img.shields.io/pypi/pyversions/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
-[![License](https://img.shields.io/pypi/l/fiji-mcp-server.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/fiji-mcp-server.svg)](LICENSE)
 
-**Give your AI assistant hands inside Fiji/ImageJ.** Fiji MCP Server is a small
-stdio [Model Context Protocol](https://modelcontextprotocol.io/) bridge that can
-open and save images, discover and run installed commands, execute IJM or
-Groovy, read Results, and verify changes with screenshots.
+An MCP server that lets an AI assistant work in [Fiji/ImageJ](https://fiji.sc/): open and save images, find and run installed commands and plugins, run ImageJ macros or Groovy, read the Results table, and check its work with screenshots.
 
-This README documents v0.2.0. The public surface is deliberately limited to
-nine tools; Fiji's live command registries and scripting APIs provide the
-plugin reach without a large custom framework.
+![The ImageJ blobs sample before thresholding, the thresholded mask, and their difference](docs/images/blobs-threshold.png)
 
-## Quick start
+*A recorded run on the ImageJ blobs sample: the assistant opened the image, thresholded it with a macro, counted 43 particles, and compared before and after screenshots.*
 
-You need Python 3.10 or newer and a local
-[Fiji](https://fiji.sc/) installation.
+## Tools
 
-1. Install the server:
+| Tool | What it does |
+| --- | --- |
+| `get_state` | Reports whether Fiji is running, which images are open, and the Results table size. |
+| `open_image` | Opens a local image and makes it the active one. |
+| `search_commands` | Searches Fiji's installed commands and plugins and shows how each can be called. |
+| `run_command` | Runs one installed command with its parameters. |
+| `run_script` | Runs an ImageJ macro (IJM) or a Groovy script. |
+| `get_results` | Reads the Results table, a page at a time. |
+| `screenshot` | Returns a PNG of the active image or the Results table. |
+| `compare_screenshots` | Compares two saved screenshots, by eye and by pixel values. |
+| `save_image` | Saves the active image to a new file. |
 
-   ```bash
-   python -m pip install "fiji-mcp-server==0.2.0"
-   ```
+The [tool reference](docs/tools.md) lists every argument, return field, and limit.
 
-   To test a source checkout instead:
+## Install
 
-   ```bash
-   python -m pip install .
-   ```
-
-2. Locate the Fiji root directory. It must directly contain `jars/` and
-   `plugins/`; on this Mac, for example, it is `/Applications/Fiji`.
-
-3. Configure your MCP client with `FIJI_PATH` and `FIJI_MODE=headless`; see
-   the client-specific instructions below. The MCP client owns the stdio process
-   and starts `fiji-mcp-server` when needed.
-
-Fiji starts lazily on the first Fiji-backed tool call. The bridge prefers one
-compatible JVM bundled inside the selected Fiji installation.
-
-## Connect Codex
-
-The official Codex CLI, IDE extension, and ChatGPT desktop app share MCP
-configuration on the same Codex host. Add this stdio server from a terminal:
+Needs Python 3.10 or newer and a local [Fiji](https://fiji.sc/) installation.
 
 ```bash
-codex mcp add fiji \
-  --env FIJI_PATH=/Applications/Fiji \
-  --env FIJI_MODE=headless \
-  -- fiji-mcp-server
-codex mcp list
+python -m pip install fiji-mcp-server
 ```
 
-Or add the equivalent entry to `~/.codex/config.toml` (or a trusted project's
-`.codex/config.toml`):
+Every client below needs two settings: `FIJI_PATH`, the Fiji folder that contains `jars/` and `plugins/` (for example `/Applications/Fiji`), and `FIJI_MODE=headless`. Fiji starts on the first tool call, which can take a minute.
 
-```toml
-[mcp_servers.fiji]
-command = "fiji-mcp-server"
-startup_timeout_sec = 120
-tool_timeout_sec = 300
+## Connect
 
-[mcp_servers.fiji.env]
-FIJI_PATH = "/Applications/Fiji"
-FIJI_MODE = "headless"
-```
-
-In ChatGPT desktop, you can also open **Settings → MCP servers → Add server**,
-choose **STDIO**, and then restart after saving. See the
-[official Codex MCP documentation](https://developers.openai.com/codex/mcp/)
-for current client controls.
-
-## Connect Claude
-
-For Claude Code, use the absolute path reported by `which fiji-mcp-server`:
+**Claude Code**
 
 ```bash
-claude mcp add \
-  --scope user \
-  --transport stdio \
-  fiji \
-  --env FIJI_PATH=/Applications/Fiji \
-  --env FIJI_MODE=headless \
-  -- /absolute/path/to/fiji-mcp-server
-claude mcp get fiji
+claude mcp add fiji -e FIJI_PATH=/Applications/Fiji -e FIJI_MODE=headless -- fiji-mcp-server
 ```
 
-For Claude Desktop, add this entry to `claude_desktop_config.json`. On macOS,
-the file is in `~/Library/Application Support/Claude/`. On Windows, it is in
-`%APPDATA%\Claude\`. Fully quit and reopen Claude Desktop after saving.
+**Codex**
+
+```bash
+codex mcp add fiji --env FIJI_PATH=/Applications/Fiji --env FIJI_MODE=headless -- fiji-mcp-server
+```
+
+Then set `startup_timeout_sec = 120` and `tool_timeout_sec = 300` under `[mcp_servers.fiji]` in `~/.codex/config.toml`, so Codex waits for Fiji to start and for long operations.
+
+**Claude Desktop, Cursor, Gemini CLI, and Antigravity** use the same entry:
 
 ```json
 {
   "mcpServers": {
     "fiji": {
-      "command": "/absolute/path/to/fiji-mcp-server",
-      "args": [],
-      "env": {
-        "FIJI_PATH": "/Applications/Fiji",
-        "FIJI_MODE": "headless"
-      }
+      "command": "fiji-mcp-server",
+      "env": { "FIJI_PATH": "/Applications/Fiji", "FIJI_MODE": "headless" }
     }
   }
 }
 ```
 
-See the official [Claude Code MCP guide](https://code.claude.com/docs/en/mcp)
-and [Claude Desktop host guide](https://py.sdk.modelcontextprotocol.io/get-started/real-host/).
+| Client | Where the entry goes |
+| --- | --- |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows), then restart the app |
+| Cursor | `~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project |
+| Gemini CLI | `~/.gemini/settings.json`, or `.gemini/settings.json` in a project |
+| Antigravity | Agent panel `…` menu → MCP Servers → Manage MCP Servers → View raw config |
 
-## Connect Gemini CLI
+If a client cannot find `fiji-mcp-server`, use the full path that `which fiji-mcp-server` prints (`where` on Windows).
 
-Gemini CLI supports the same local stdio server. User scope makes it available
-in all trusted projects:
+## Use
+
+> Open `/data/cells.tif`, threshold it with Otsu, measure the particles, and show me the Results table and a before-and-after screenshot.
+
+> Search the installed commands for "Gaussian Blur" and run it with sigma 2.
+
+## Limits
+
+- `run_script` runs any macro or Groovy code with your permissions. Use the server only with a client you trust on your own computer.
+- Headless mode cannot answer dialogs. Plugins that need a dialog, mouse, or keyboard may fail; set `FIJI_MODE=gui` only when you want Fiji's window.
+- An operation that runs longer than `FIJI_OPERATION_TIMEOUT_SEC` (default 240 s) stops the server, because Java work cannot be cancelled safely. Restart the client's connection, and keep the client's tool timeout above this value.
+- `save_image` will not overwrite an existing file; `screenshot` and `compare_screenshots` will, so give them new paths when you want to keep old ones.
+
+## Development
 
 ```bash
-gemini mcp add \
-  --scope user \
-  --transport stdio \
-  -e FIJI_PATH=/Applications/Fiji \
-  -e FIJI_MODE=headless \
-  fiji /absolute/path/to/fiji-mcp-server
-gemini mcp list
+python -m pip install -e ".[test,dev]"
+python -m pytest -m "not integration"
 ```
 
-See the official [Gemini CLI MCP guide](https://geminicli.com/docs/tools/mcp-server/).
+The integration tests need a local Fiji; see `tests/test_integration_runtime.py`. The [changelog](CHANGELOG.md) lists each release.
 
-## Connect Perplexity
+## Credits and license
 
-Local MCP is currently documented for the Perplexity macOS app from the Mac
-App Store. The feature is rolling out to paid subscribers. Open **Settings →
-Connectors**, install the **PerplexityXPC** helper, then select **Add Connector
-→ Simple**. Use `Fiji` as the server name and this command:
+Built on [Fiji](https://fiji.sc/), [ImageJ](https://imagej.net/), [PyImageJ](https://github.com/imagej/pyimagej), and [FastMCP](https://gofastmcp.com/). [napari-mcp](https://github.com/royerlab/napari-mcp) inspired the design. The example image is ImageJ's blobs sample.
 
-```text
-/usr/bin/env FIJI_PATH=/Applications/Fiji FIJI_MODE=headless /absolute/path/to/fiji-mcp-server
-```
-
-Save the connector, wait for **Running**, and enable it under **Sources**.
-Perplexity does not currently document local MCP setup for Windows or
-standalone Comet. See the official
-[Perplexity local MCP guide](https://www.perplexity.ai/help-center/en/articles/11502712-local-and-remote-mcps-for-perplexity).
-
-## Try these prompts
-
-> **Prompt:** Open `/data/cells.tif`, inspect its dimensions and current C/Z/T
-> position, and show me an active-image screenshot.
-
-> **Prompt:** Search the installed Fiji commands for “Gaussian Blur”. Show the
-> best matching command's invocation route and accepted inputs, then run it with
-> sigma 2 only if that parameter is supported.
-
-> **Prompt:** Run an ImageJ macro that thresholds the active image and measures
-> it, then return the Results table in pages of 200 rows.
-
-> **Prompt:** Save a screenshot to `/tmp/before.png`, apply the chosen threshold,
-> save `/tmp/after.png`, and compare them. If the expected change is absent,
-> inspect state and logs before adjusting the threshold once; do not blindly
-> repeat a mutation whose outcome is unknown.
-
-> **Prompt:** Use Groovy to call an installed scriptable plugin that is not
-> representable as a structured command, then summarize its bounded result and
-> the active-image state.
-
-> **Prompt:** Save the active image as `/data/output/processed.tiff`. Do not
-> overwrite an existing file, and report the exact path Fiji created.
-
-## What can it do?
-
-- **Inspect and move data:** read live state, open a local image, save the active
-  image, and page through the Results table.
-- **Use installed commands:** search Fiji's SciJava and ImageJ1 registries, then
-  invoke a selected command through structured parameters or legacy options
-  when that route is supported.
-- **Reach scriptable plugins:** use trusted IJM or Groovy for ROIs, unusual Java
-  inputs, and installed plugins that do not fit the registered command route.
-- **Verify visually:** render the active plane or Results table, save before and
-  after PNGs, and compare dimensions and same-size pixel metrics.
-
-The server does not install plugins, click dialogs, drive menus, or promise
-structured parameters for every plugin.
-
-## The nine tools
-
-| Tool | Purpose |
-| --- | --- |
-| `get_state` | Read Fiji lifecycle, active/open images, and Results-table state. |
-| `search_commands` | Search registered SciJava and ImageJ1 commands and inspect their routes. |
-| `run_command` | Run one resolved installed command with supported parameters or options. |
-| `run_script` | Run one trusted IJM or Groovy script. |
-| `open_image` | Open an existing local image and make it current. |
-| `save_image` | Save the active image to a new exact lowercase supported path. |
-| `get_results` | Read an ordered, paginated page from Fiji's live Results table. |
-| `screenshot` | Return and optionally save a PNG of the active plane or Results. |
-| `compare_screenshots` | Compare two saved raster paths visually and, when sizes match, numerically. |
-
-See the [complete nine-tool reference](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/docs/tools.md) for
-signatures, return fields, limits, and failure behavior.
-
-## How it works
-
-```text
-AI client ── stdio JSON-RPC ──▶ FastMCP ── serialized bridge ──▶ PyImageJ ──▶ Fiji + installed plugins
-```
-
-Fiji operations share one process-wide lock. Read-only operations receive at
-most one retry for a small allowlist of transient failures. Commands, scripts,
-image opens, and saves are never automatically repeated after dispatch.
-
-## Safety and limitations
-
-`run_script` executes **trusted arbitrary local code**. IJM and Groovy can read
-or modify anything available to the MCP process, so run this server only for a
-trusted local client. It is not a remote multi-user service or a sandbox.
-
-Python diagnostics and ordinary Java output are redirected to stderr to protect
-stdio JSON-RPC. Plugins that require GUI dialogs, mouse/keyboard automation, or
-unscriptable interaction may fail in headless mode. Use `FIJI_MODE=gui` only for
-an intentional local desktop workflow supported by that plugin.
-
-`save_image` is strict within this MCP server process: its requested suffix must
-be one of the exact lowercase formats documented in the tool reference, and an
-output that exists when the serialized save begins is rejected. It is not a
-cross-process atomic publisher, so another local process can still race that
-check; use a dedicated output directory when other writers are active.
-`screenshot` and `compare_screenshots` overwrite an existing `save_path`; use a
-new path when preserving an existing PNG is required. After any mutation with
-an unknown outcome, inspect state or take a screenshot before deciding whether
-to retry.
-
-## Project links and acknowledgments
-
-- [Fiji](https://fiji.sc/) and [ImageJ](https://imagej.net/)
-- [PyImageJ](https://github.com/imagej/pyimagej)
-- [FastMCP](https://gofastmcp.com/)
-- README-structure inspiration: [Cellpose MCP](https://github.com/surajinacademia/cellpose_mcp)
-- Related minimal viewer bridge: [napari-mcp](https://github.com/royerlab/napari-mcp)
-- [Changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md)
-
-## License
-
-BSD-3-Clause. See [LICENSE](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE).
+BSD-3-Clause; see [LICENSE](LICENSE).
