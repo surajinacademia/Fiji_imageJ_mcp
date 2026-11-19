@@ -190,6 +190,7 @@ def test_source_distribution_manifest_is_minimal() -> None:
     assert Path("MANIFEST.in").read_text().splitlines() == [
         "include README.md",
         "include LICENSE",
+        "include THIRD_PARTY_NOTICES.md",
         "include CHANGELOG.md",
         "include RELEASING.md",
         "include docs/tools.md",
@@ -270,39 +271,27 @@ def test_repository_surface_is_lean_and_local_rules_are_ignored() -> None:
     assert "docs/releases" not in releasing
 
 
-def test_readme_documents_v020_clients_and_exact_tool_surface() -> None:
+def test_readme_documents_clients_and_exact_tool_surface() -> None:
     readme = Path("README.md").read_text()
     json_config = readme.split("```json\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
-    toml_config = readme.split("```toml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
-    tool_section = readme.split("## The nine tools\n", maxsplit=1)[1].split(
-        "\n## ", maxsplit=1
-    )[0]
+    tool_section = readme.split("## Tools\n", maxsplit=1)[1].split("\n## ", maxsplit=1)[
+        0
+    ]
     documented_tools = re.findall(r"^\| `([^`]+)` \|", tool_section, re.MULTILINE)
 
-    assert "This README documents v0.2.0" in readme
-    assert 'python -m pip install "fiji-mcp-server==0.2.0"' in readme
-    assert "Before v0.2.0 is published" not in readme
-    assert "codex mcp add fiji" in readme
-    assert "## Connect Claude" in readme
-    assert "claude mcp add" in readme
-    assert "claude mcp get fiji" in readme
-    assert "claude_desktop_config.json" in readme
-    assert "## Connect Gemini CLI" in readme
-    assert "gemini mcp add" in readme
-    assert "gemini mcp list" in readme
-    assert "## Connect Perplexity" in readme
-    assert "PerplexityXPC" in readme
-    assert (
-        "/usr/bin/env FIJI_PATH=/Applications/Fiji FIJI_MODE=headless "
-        "/absolute/path/to/fiji-mcp-server" in readme
-    )
-    assert json.loads(json_config)["mcpServers"]["fiji"]["command"] == (
-        "/absolute/path/to/fiji-mcp-server"
-    )
-    assert json.loads(json_config)["mcpServers"]["fiji"]["args"] == []
-    assert tomllib.loads(toml_config)["mcp_servers"]["fiji"]["env"] == {
-        "FIJI_PATH": "/Applications/Fiji",
-        "FIJI_MODE": "headless",
+    assert "python -m pip install fiji-mcp-server" in readme
+    for client in (
+        "claude mcp add fiji",
+        "codex mcp add fiji",
+        "claude_desktop_config.json",
+        ".cursor/mcp.json",
+        ".gemini/settings.json",
+        "Antigravity",
+    ):
+        assert client in readme
+    assert json.loads(json_config)["mcpServers"]["fiji"] == {
+        "command": "fiji-mcp-server",
+        "env": {"FIJI_PATH": "/Applications/Fiji", "FIJI_MODE": "headless"},
     }
     assert documented_tools == [
         "get_state",
@@ -315,26 +304,7 @@ def test_readme_documents_v020_clients_and_exact_tool_surface() -> None:
         "screenshot",
         "compare_screenshots",
     ]
-    assert readme.count("> **Prompt:**") >= 5
     assert "fiji-mcp-install" not in readme
-    assert "trusted arbitrary local code" in readme
-    assert "The MCP client owns the stdio process" in readme
-    assert "python -m pip install ." in readme
-    assert "`save_image` is strict" in readme
-    assert "within this MCP server process" in readme
-    assert re.search(r"not a\s+cross-process atomic publisher", readme)
-    assert (
-        "`screenshot` and `compare_screenshots` overwrite an existing `save_path`"
-        in readme
-    )
-    assert (
-        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/docs/tools.md"
-        in readme
-    )
-    assert (
-        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE" in readme
-    )
-    assert (
-        "https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md"
-        in readme
-    )
+    assert "## Evaluation" in readme
+    # PyPI shows this README, so every link must be absolute.
+    assert re.findall(r"\]\((?!https?://|#)[^)]+\)", readme) == []

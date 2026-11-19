@@ -1,11 +1,12 @@
 # Fiji MCP Server
 
+[![CI](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/fiji-mcp-server.svg)](https://pypi.org/project/fiji-mcp-server/)
-[![License](https://img.shields.io/pypi/l/fiji-mcp-server.svg)](LICENSE)
+[![License](https://img.shields.io/pypi/l/fiji-mcp-server.svg)](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE)
 
 An MCP server that lets an AI assistant work in [Fiji/ImageJ](https://fiji.sc/): open and save images, find and run installed commands and plugins, run ImageJ macros or Groovy, read the Results table, and check its work with screenshots.
 
-![The ImageJ blobs sample before thresholding, the thresholded mask, and their difference](docs/images/blobs-threshold.png)
+![The ImageJ blobs sample before thresholding, the thresholded mask, and their difference](https://raw.githubusercontent.com/surajinacademia/Fiji_imageJ_mcp/main/docs/images/blobs-threshold.png)
 
 *A recorded run on the ImageJ blobs sample: the assistant opened the image, thresholded it with a macro, counted 43 particles, and compared before and after screenshots.*
 
@@ -14,16 +15,16 @@ An MCP server that lets an AI assistant work in [Fiji/ImageJ](https://fiji.sc/):
 | Tool | What it does |
 | --- | --- |
 | `get_state` | Reports whether Fiji is running, which images are open, and the Results table size. |
-| `open_image` | Opens a local image and makes it the active one. |
 | `search_commands` | Searches Fiji's installed commands and plugins and shows how each can be called. |
 | `run_command` | Runs one installed command with its parameters. |
 | `run_script` | Runs an ImageJ macro (IJM) or a Groovy script. |
+| `open_image` | Opens a local image and makes it the active one. |
+| `save_image` | Saves the active image to a new file. |
 | `get_results` | Reads the Results table, a page at a time. |
 | `screenshot` | Returns a PNG of the active image or the Results table. |
 | `compare_screenshots` | Compares two saved screenshots, by eye and by pixel values. |
-| `save_image` | Saves the active image to a new file. |
 
-The [tool reference](docs/tools.md) lists every argument, return field, and limit.
+The [tool reference](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/docs/tools.md) lists every argument, return field, and limit.
 
 ## Install
 
@@ -79,6 +80,17 @@ If a client cannot find `fiji-mcp-server`, use the full path that `which fiji-mc
 
 > Search the installed commands for "Gaussian Blur" and run it with sigma 2.
 
+## Evaluation
+
+The figure above comes from a scripted run of the server on ImageJ's blobs sample: open the image, threshold it with Otsu, measure particles of at least 50 pixels that do not touch the edge, and compare before and after screenshots. Fiji found 43 particles, from 81 to 902 px². An independent count of the saved mask, written without Fiji, finds the same 43 particles with identical areas.
+
+```bash
+FIJI_PATH=/Applications/Fiji python examples/blobs/run_blobs.py --output my-run
+python examples/blobs/check_blobs.py my-run
+```
+
+The recorded run is in [examples/blobs/run](https://github.com/surajinacademia/Fiji_imageJ_mcp/tree/main/examples/blobs/run): every tool call in order, Fiji's Results table, and the check. CI runs the unit and MCP contract tests on Python 3.10–3.12 for every push.
+
 ## Limits
 
 - `run_script` runs any macro or Groovy code with your permissions. Use the server only with a client you trust on your own computer.
@@ -93,10 +105,10 @@ python -m pip install -e ".[test,dev]"
 python -m pytest -m "not integration"
 ```
 
-The integration tests need a local Fiji; see `tests/test_integration_runtime.py`. The [changelog](CHANGELOG.md) lists each release.
+The integration tests need a local Fiji; see `tests/test_integration_runtime.py`. The [changelog](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/CHANGELOG.md) lists each release.
 
 ## Credits and license
 
 Built on [Fiji](https://fiji.sc/), [ImageJ](https://imagej.net/), [PyImageJ](https://github.com/imagej/pyimagej), and [FastMCP](https://gofastmcp.com/). [napari-mcp](https://github.com/royerlab/napari-mcp) inspired the design. The example image is ImageJ's blobs sample.
 
-The code is BSD-3-Clause; see [LICENSE](LICENSE). Image credits and terms are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The code is BSD-3-Clause; see [LICENSE](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/LICENSE). Image credits and terms are in [THIRD_PARTY_NOTICES.md](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/THIRD_PARTY_NOTICES.md).
