@@ -1,0 +1,13 @@
+{
+  "particles_fiji": 43,
+  "particles_independent": 43,
+  "areas_match": true,
+  "area_range_px2": [
+    81,
+    902
+  ],
+  "image_shape": [
+    254,
+    256
+  ]
+}
