@@ -99,4 +99,4 @@ The integration tests need a local Fiji; see `tests/test_integration_runtime.py`
 
 Built on [Fiji](https://fiji.sc/), [ImageJ](https://imagej.net/), [PyImageJ](https://github.com/imagej/pyimagej), and [FastMCP](https://gofastmcp.com/). [napari-mcp](https://github.com/royerlab/napari-mcp) inspired the design. The example image is ImageJ's blobs sample.
 
-BSD-3-Clause; see [LICENSE](LICENSE).
+The code is BSD-3-Clause; see [LICENSE](LICENSE). Image credits and terms are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
