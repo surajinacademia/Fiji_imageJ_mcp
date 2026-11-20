@@ -10,6 +10,8 @@ An MCP server that lets an AI assistant work in [Fiji/ImageJ](https://fiji.sc/):
 
 *A recorded run on the ImageJ blobs sample: the assistant opened the image, thresholded it with a macro, counted 43 particles, and compared before and after screenshots.*
 
+A one-page [walkthrough poster (PDF)](https://github.com/surajinacademia/Fiji_imageJ_mcp/blob/main/walkthrough/poster.pdf) walks you step by step from setup to your first results, for people who use AI apps but do not code.
+
 ## Tools
 
 | Tool | What it does |

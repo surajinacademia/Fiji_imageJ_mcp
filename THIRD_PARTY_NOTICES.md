@@ -13,3 +13,7 @@ The code in this repository is covered by [LICENSE](LICENSE) (BSD-3-Clause). The
 ## Fiji and ImageJ
 
 The server drives a local [Fiji](https://fiji.sc/) installation through [PyImageJ](https://github.com/imagej/pyimagej). Fiji, ImageJ, and their plugins are not bundled and keep their own licenses.
+
+## Walkthrough poster
+
+The logo and images in `walkthrough/poster.pdf` and `walkthrough/poster.png` keep their own terms; [walkthrough/SOURCES.md](walkthrough/SOURCES.md) lists each source and license.
